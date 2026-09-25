@@ -49,6 +49,10 @@ Thread, Midnight Cord, Temple Thread, Silver Cord:
   (position, length, charms, rope style), Appearance, Import (your own PNG, JPG
   or SVG pictures) and About. Every number is a slider: drag right to increase,
   left to decrease, and the charms follow live.
+- **Your own charms**: imported pictures are fitted into 256 × 256 and saved as
+  PNG in `~/.local/share/dangle/charms/` (SVGs are converted, so the Shell only
+  ever loads PNGs). The original file is left untouched; delete imported charms
+  from the Import page.
 - **Charms**: fourteen original drawings, including Lord Murugan's Vel and
   Karuppasamy's Aruval (both on the Temple preset).
 
@@ -58,17 +62,31 @@ primary monitor, and on the lock screen.
 ## Install (fish)
 
 ```fish
-make install          # copies core/, compiles schemas, installs to ~/.local/share/gnome-shell/extensions/
-```
-
-Wayland cannot load a newly installed extension into the running session. Log
-out and back in, then:
-
-```fish
+cd ~/Desktop/hangly-linux
+make install                                            # build and copy to ~/.local/share/gnome-shell/extensions/
+gsettings set org.gnome.shell disable-user-extensions false
 gnome-extensions enable dangle@nithees
 ```
 
-To remove it completely: `make uninstall`.
+Then **log out and back in once** (Wayland cannot load new extension code into a
+running session). That is all it takes to keep Dangle across reboots: the
+extension lives in your home folder, the "enabled" state and all your choices
+(cords, charms, preset) are stored in GNOME's settings, and imported charms stay
+in `~/.local/share/dangle/charms/`.
+
+Check it after a reboot:
+
+```fish
+gnome-extensions info dangle@nithees      # Enabled: Yes · State: ACTIVE
+```
+
+- **Update** after pulling or editing the code: `make install`, then log out and
+  back in.
+- **Remove** completely: `make uninstall` (imported charms in
+  `~/.local/share/dangle/` are kept; delete that folder too if you want them gone).
+- **Package** for extensions.gnome.org: `make pack` →
+  `dist/dangle@nithees.shell-extension.zip` (installable with
+  `gnome-extensions install --force dist/dangle@nithees.shell-extension.zip`).
 
 ## Try it in a nested shell first
 
@@ -93,9 +111,9 @@ env DANGLE_DEBUG=1 make nested
 
 | Command | What it does |
 |---|---|
-| `make test` | `node --test tests/`: rope physics, styles, charm layout, wind, cords, presets, artwork, and a 5 cords × 3 charms bench (≤ 1 ms/frame) |
+| `make test` | `node --test tests/` (121 tests): rope physics incl. the elastic pull, styles, charm layout, wind, cords, presets, artwork, and a 5 cords × 3 charms bench (≤ 1 ms/frame) |
 | `make lint` | ESLint with GNOME Shell's style rules |
-| `make headless-test` | Runs Dangle inside a throwaway headless GNOME Shell 50 (isolated settings) and checks it for real: stacking, click-through with real windows, Super+click grab, Quick Settings, the preferences window, import, fullscreen, two monitors, idle cost, 20 enable/disable cycles |
+| `make headless-test` | Runs Dangle inside a throwaway headless GNOME Shell 50 (isolated settings, never touches your session) and checks it for real — 175 checks: stacking, click-through with real windows, Super+click grab, the elastic pull, Quick Settings, "Open settings…", the preferences window and its sliders, import, fullscreen, two monitors, idle cost, 20 enable/disable cycles |
 | `make pack` | `dist/dangle@nithees.shell-extension.zip` for extensions.gnome.org |
 | `make logs` | Follow GNOME Shell's journal |
 
@@ -114,6 +132,17 @@ Layout: `core/` is pure JavaScript shared by node and the Shell (copied into
 - Measured in GNOME Shell: ~1.5 ms per frame with five cords of three charms all
   swinging; zero repaints once they settle, and idle CPU within measurement noise of
   having Dangle disabled.
+
+## Troubleshooting
+
+| Problem | Fix |
+|---|---|
+| New features don't appear after `make install` | Log out and back in: Wayland keeps the old code loaded until then. |
+| "Open settings…" does nothing / `gnome-extensions prefs` says the extension "doesn't have preferences" | GNOME Shell decided that when it first scanned an older copy. Current Dangle opens its settings anyway; logging out and back in also resets the Shell's record. |
+| Dangle stopped after a GNOME upgrade | The extension declares support for GNOME Shell 50 only; add the new version to `shell-version` in `extension/metadata.json`, test, and `make install`. |
+| Clicking a charm does nothing | By design: hold <kbd>Super</kbd> (or your chosen modifier) to grab, or turn on *Grab without Super*. |
+| No breeze | It pauses on battery (see *Breeze on battery*) and when system animations are off. |
+| Logs | `make logs`, or `journalctl -f -o cat /usr/bin/gnome-shell`. |
 
 ## License
 

@@ -826,6 +826,37 @@ async function elastic(ctx) {
     }
 }
 
+// ── "Open settings…" really opens the preferences window ───────────────────
+
+const prefsWindow = () => global.display.list_all_windows().find(w => w.get_title() === 'Dangle');
+
+async function openSettings(ctx) {
+    const ext = ctx.dangle();
+    const toggle = ext.stateObj._indicator.quickSettingsItems[0];
+    const item = toggle.menu._getMenuItems().find(i => i.label?.text === 'Open settings…');
+    ctx.check('"Open settings…" is in the menu', !!item);
+
+    for (const [label, stale] of [['normally', false], ['even when the Shell thinks there are no prefs', true]]) {
+        const real = ext.hasPrefs;
+        if (stale)
+            ext.hasPrefs = false; // what a session that scanned Dangle before prefs.js existed has
+        item.emit('activate', Clutter.get_current_event());
+        // eslint-disable-next-line no-await-in-loop
+        const ms = await waitFor(() => !!prefsWindow(), 15000);
+        ext.hasPrefs = real;
+        ctx.check(`"Open settings…" opens the preferences window ${label}`, ms >= 0, ms >= 0 ? `${Math.round(ms)} ms` : 'no window');
+        prefsWindow()?.delete(global.get_current_time());
+        // eslint-disable-next-line no-await-in-loop
+        await waitFor(() => !prefsWindow(), 5000);
+        // eslint-disable-next-line no-await-in-loop
+        await sleep(500);
+    }
+    if (Main.overview.visible) {
+        Main.overview.hide();
+        await waitFor(() => !Main.overview.visible, 3000);
+    }
+}
+
 export const ALL_CHECKS = [
     ['structure', structure],
     ['sleep', sleeping],
@@ -835,6 +866,7 @@ export const ALL_CHECKS = [
     ['presets', presets],
     ['quick-settings', quickSettings],
     ['prefs', prefs],
+    ['open-settings', openSettings],
     ['pointer', pointer],
     ['grab', grab],
     ['elastic', elastic],

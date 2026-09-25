@@ -505,9 +505,13 @@ export class Rope {
             py[drag] = y[drag] - this._dragVY * h;
         }
 
-        // 4. Relax, alternating sweep direction, until converged or out of budget.
-        for (let it = 0; it < p.iterations; it++) {
-            const residual = Math.max(this._relax(it & 1), this._separateCharms());
+        // 4. Relax until converged or out of budget, in forward+backward pairs:
+        //    stopping after a lone forward sweep on some substeps and a backward
+        //    one on others leaves a sub-pixel flicker that never settles.
+        for (let it = 0; it < p.iterations; it += 2) {
+            const forward = this._relax(false);
+            const backward = this._relax(true);
+            const residual = Math.max(forward, backward, this._separateCharms());
             if (residual < DEFAULTS.tolerance)
                 break;
         }

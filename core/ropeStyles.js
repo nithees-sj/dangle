@@ -12,7 +12,7 @@ export const DEFAULTS = Object.freeze({
     damping: 0.999,
     iterations: 16,
     stretchPasses: 8,
-    tolerance: 0.05,
+    tolerance: 0.1,
     maxStretch: 1.02,
     fixedStep: 1 / 240,
     maxFrame: 0.05,

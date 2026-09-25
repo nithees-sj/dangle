@@ -23,7 +23,9 @@ User shell is **fish** — write any commands for fish.
 - Relaxation and stretch passes capped at 48 with early exit (tolerance 0.05),
   plus an O(n) follow-the-leader guard: links never exceed 1.02× rest length.
 - Ceiling constraint: no node rises above the anchor (panel bottom).
-- Every style sleeps within 5 s after a push (settle envelope + rest assist).
+- Every style sleeps within 5 s after a push: damping ramps to critical (per
+  rope length) 1–2 s after the last disturbance; sleep = <0.35 px drift in
+  0.25 s while hanging plumb.
 - Hot loop uses Float64Arrays; no allocation per step.
 - Bench: 5 cords × 3 charms must average ≤ 1 ms/frame in node.
 

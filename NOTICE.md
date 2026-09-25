@@ -11,7 +11,7 @@ of the Verlet rope simulation in **Hangly for Windows**
 Specifically:
 
 - `core/rope.js` — solver step order (pin → integrate → drive held node → relax →
-  stretch clamp), physics constants (gravity, damping, rest speed, reach ratio,
+  stretch clamp), physics constants (gravity, damping, reach ratio,
   max speed, initial release angle), push speed formula, drag reach clamp,
   anchor translation that preserves motion, charm-pair separation constraint.
 - `core/ropeStyles.js` — the nine rope styles' physics profiles and colour

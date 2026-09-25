@@ -60,6 +60,7 @@ const style = {
             // future it's intended to be a decorator
             'CallExpression[callee.object.name=GObject][callee.property.name=registerClass] > ClassExpression:first-child',
         ],
+        SwitchCase: 0,
         CallExpression: {arguments: 'first'},
         ArrayExpression: 'first',
         ObjectExpression: 'first',

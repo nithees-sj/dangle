@@ -1,0 +1,105 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<schemalist gettext-domain="dangle">
+  <schema id="org.gnome.shell.extensions.dangle"
+          path="/org/gnome/shell/extensions/dangle/">
+
+    <key name="enabled" type="b">
+      <default>true</default>
+      <summary>Show the charms</summary>
+      <description>When off, every charm is hidden and all animation work stops.</description>
+    </key>
+
+    <key name="preset" type="s">
+      <choices>
+        <choice value="festive"/>
+        <choice value="minimal"/>
+        <choice value="spooky"/>
+        <choice value="custom"/>
+      </choices>
+      <default>'minimal'</default>
+      <summary>Active preset</summary>
+      <description>Selecting a preset writes its layout into the cords key. Editing any cord switches to custom.</description>
+    </key>
+
+    <key name="cords" type="a(ddsas)">
+      <default>[(0.30, 120.0, 'silver-cord', ['builtin:star']), (0.37, 165.0, 'spider-thread', ['builtin:crescent'])]</default>
+      <summary>Cords currently hanging</summary>
+      <description>Up to 5 cords: (position across the bar 0–1, rope length in pixels, rope style id, 1–3 charm ids from the top down).</description>
+    </key>
+
+    <key name="custom-cords" type="a(ddsas)">
+      <default>[(0.30, 120.0, 'silver-cord', ['builtin:star']), (0.37, 165.0, 'spider-thread', ['builtin:crescent'])]</default>
+      <summary>Remembered custom layout</summary>
+      <description>Restored when the Custom preset is selected.</description>
+    </key>
+
+    <key name="charm-size" type="i">
+      <range min="24" max="96"/>
+      <default>44</default>
+      <summary>Charm size in pixels</summary>
+      <description>Diameter of a lone charm. Stacked charms are drawn a little smaller.</description>
+    </key>
+
+    <key name="rope-thickness" type="d">
+      <range min="0.5" max="2.5"/>
+      <default>1.0</default>
+      <summary>Rope thickness multiplier</summary>
+      <description>Scales the width each rope style is drawn at.</description>
+    </key>
+
+    <key name="shadow" type="b">
+      <default>true</default>
+      <summary>Draw a soft shadow under ropes</summary>
+      <description>A faint offset stroke that separates ropes from the windows behind them.</description>
+    </key>
+
+    <key name="breeze-enabled" type="b">
+      <default>true</default>
+      <summary>Occasional gentle breeze</summary>
+      <description>Every 45–120 seconds a short gust sways the charms.</description>
+    </key>
+
+    <key name="breeze-on-battery" type="b">
+      <default>false</default>
+      <summary>Keep the breeze on battery power</summary>
+      <description>By default the breeze pauses while the laptop runs on battery.</description>
+    </key>
+
+    <key name="breeze-strength" type="d">
+      <range min="0.0" max="1.0"/>
+      <default>0.5</default>
+      <summary>Breeze strength</summary>
+      <description>How far a gust pushes the charms.</description>
+    </key>
+
+    <key name="grab-modifier" type="s">
+      <choices>
+        <choice value="super"/>
+        <choice value="alt"/>
+        <choice value="ctrl-alt"/>
+      </choices>
+      <default>'super'</default>
+      <summary>Modifier held to grab charms</summary>
+      <description>Charms let clicks pass through to windows unless this modifier is held.</description>
+    </key>
+
+    <key name="grab-without-super" type="b">
+      <default>false</default>
+      <summary>Grab charms without holding the modifier</summary>
+      <description>When on, charms always catch clicks. Clicks on ropes and empty space still reach windows.</description>
+    </key>
+
+    <key name="respect-reduced-motion" type="b">
+      <default>true</default>
+      <summary>Respect reduced motion</summary>
+      <description>When system animations are disabled, charms hang still: no breeze, no nudges and no initial swing. Dragging still works.</description>
+    </key>
+
+    <key name="active-cord" type="i">
+      <range min="0" max="4"/>
+      <default>0</default>
+      <summary>Cord selected in the preferences Library</summary>
+      <description>Internal: remembers which cord the Library page edits.</description>
+    </key>
+  </schema>
+</schemalist>

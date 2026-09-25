@@ -1,0 +1,13 @@
+{
+  "uuid": "dangle@nithees",
+  "name": "Dangle",
+  "description": "Hang little physics-simulated charms on ropes from the bottom of the top bar. Nudge them with the pointer, hold Super to grab and flick them, and control everything from Quick Settings.",
+  "shell-version": [
+    "50"
+  ],
+  "session-modes": [
+    "user"
+  ],
+  "settings-schema": "org.gnome.shell.extensions.dangle",
+  "version-name": "0.1.0"
+}

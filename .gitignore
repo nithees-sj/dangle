@@ -1,0 +1,9 @@
+# Reference clone: studied, never shipped
+reference-hangly/
+
+# Generated at install/pack time
+extension/core/
+extension/schemas/gschemas.compiled
+dist/
+
+node_modules/

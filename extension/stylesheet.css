@@ -1,0 +1,5 @@
+/* Dangle — charms are drawn from SVGs; only menu chrome needs styling. */
+
+.dangle-charm {
+    padding: 0;
+}

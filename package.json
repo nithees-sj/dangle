@@ -1,0 +1,18 @@
+{
+  "name": "dangle",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Physics-simulated charms hanging from the GNOME Shell top bar",
+  "license": "GPL-2.0-or-later",
+  "type": "module",
+  "scripts": {
+    "test": "node --test tests/",
+    "lint": "eslint ."
+  },
+  "devDependencies": {
+    "@eslint/js": "^10.0.1",
+    "@stylistic/eslint-plugin": "^5.10.0",
+    "eslint": "^10.11.0",
+    "globals": "^17.12.0"
+  }
+}

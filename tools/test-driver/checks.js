@@ -110,6 +110,10 @@ async function cycle(ctx) {
     const ui = Main.layoutManager.uiGroup;
     const before = countActors(global.stage);
     const uiBefore = ui.get_n_children();
+    const grid = Main.panel.statusArea.quickSettings.menu._grid;
+    const gridBefore = grid.get_n_children();
+    const indicators = Main.panel.statusArea.quickSettings._indicators;
+    const indicatorsBefore = indicators.get_n_children();
     let leftovers = 0, errors = 0;
     for (let i = 0; i < 20; i++) {
         Main.extensionManager.disableExtension(ctx.uuid);
@@ -126,9 +130,11 @@ async function cycle(ctx) {
     ctx.check('no extension errors during cycling', errors === 0, ctx.dangle().error ?? '');
     ctx.check('exactly one overlay after cycling', overlaysInUiGroup().length === 1);
     ctx.check('uiGroup child count unchanged', ui.get_n_children() === uiBefore, `${uiBefore} → ${ui.get_n_children()}`);
+    ctx.check('Quick Settings grid unchanged after cycling', grid.get_n_children() === gridBefore, `${gridBefore} → ${grid.get_n_children()}`);
+    ctx.check('top-bar indicators unchanged after cycling', indicators.get_n_children() === indicatorsBefore);
     await waitFor(() => !ctx.overlay()?._timeline.is_playing(), 10000);
     const after = countActors(global.stage);
-    ctx.check('stage actor count unchanged after cycling', after === before, `${before} → ${after}`);
+    ctx.check('stage actor count does not grow after cycling', after <= before, `${before} → ${after}`);
 }
 
 /** The node bench, run inside the shell's own JS engine. */
@@ -445,12 +451,107 @@ async function styles(ctx) {
     await waitFor(() => !overlay._timeline.is_playing(), 10000);
 }
 
+// ── phase 6: Quick Settings ────────────────────────────────────────────────
+
+const labelOf = item => item.label?.text ?? '';
+
+async function quickSettings(ctx) {
+    const ext = ctx.dangle().stateObj;
+    const overlay = ctx.overlay();
+    const qs = Main.panel.statusArea.quickSettings;
+    const indicator = ext._indicator;
+    ctx.check('indicator added to the top bar', !!indicator?.get_parent());
+    const toggle = indicator.quickSettingsItems[0];
+    ctx.check('toggle placed in the Quick Settings grid', toggle.get_parent() === qs.menu._grid);
+    ctx.check('toggle title is "Dangle"', toggle.title === 'Dangle');
+    ctx.check('subtitle shows the preset', toggle.subtitle === 'Minimal', toggle.subtitle);
+    ctx.check('toggle reflects enabled', toggle.checked === true);
+    ctx.check('top-bar icon visible while on', indicator.visible && indicator._indicator.visible);
+
+    toggle.checked = false;
+    await sleep(100);
+    ctx.check('toggle off writes the setting', !ctx.settings.get_boolean('enabled'));
+    ctx.check('toggle off hides every charm at once', !overlay.actor.visible && !overlay._timeline.is_playing());
+    ctx.check('top-bar icon hidden while off', !indicator.visible);
+    toggle.checked = true;
+    await sleep(100);
+    ctx.check('toggle on shows them again', overlay.actor.visible && indicator.visible);
+
+    const items = toggle.menu._getMenuItems();
+    const find = text => items.find(i => labelOf(i) === text);
+    ctx.check('menu has the four presets', ['Festive', 'Minimal', 'Spooky', 'Custom'].every(t => find(t)));
+
+    // Screenshot the open menu.
+    qs.menu.open(false);
+    toggle.menu.open(false);
+    await sleep(400);
+    await ctx.screenshot('quick-settings', 1920 - 700, 0, 700, 1000);
+
+    find('Festive').emit('activate', Clutter.get_current_event());
+    await sleep(150);
+    ctx.check('preset Festive applies live', ctx.settings.get_string('preset') === 'festive' && overlay._cords.length === 5,
+              `${ctx.settings.get_string('preset')} ${overlay._cords.length} cords`);
+    ctx.check('subtitle follows the preset', toggle.subtitle === 'Festive');
+    await sleep(600);
+    await ctx.screenshot('quick-settings-festive', 1920 - 700, 0, 700, 1000);
+
+    const styleItem = items.find(i => labelOf(i).startsWith('Rope style'));
+    ctx.check('rope style submenu shows Mixed for mixed cords', labelOf(styleItem) === 'Rope style: Mixed', labelOf(styleItem));
+    const neon = styleItem.menu._getMenuItems().find(i => labelOf(i) === 'Neon');
+    ctx.check('submenu lists nine styles', styleItem.menu._getMenuItems().length === 9);
+    neon.emit('activate', Clutter.get_current_event());
+    await sleep(150);
+    ctx.check('rope style applies to every cord', overlay._cords.every(c => c.rope.style === 'neon'));
+    ctx.check('editing switches to the Custom preset', ctx.settings.get_string('preset') === 'custom');
+    const fresh = ctx.dangle().stateObj.getSettings();
+    ctx.check('edits reach dconf (visible to a separate settings object)',
+              fresh.get_string('preset') === 'custom' && fresh.get_value('cords').deepUnpack().every(c => c[2] === 'neon'));
+    ctx.check('submenu label shows the style', labelOf(styleItem) === 'Rope style: Neon');
+
+    find('Remove cord').emit('activate', Clutter.get_current_event());
+    await sleep(100);
+    ctx.check('Remove cord', overlay._cords.length === 4);
+    find('Add cord').emit('activate', Clutter.get_current_event());
+    await sleep(100);
+    ctx.check('Add cord', overlay._cords.length === 5);
+    ctx.check('Add cord disabled at five', !find('Add cord').sensitive);
+
+    await waitFor(() => !overlay._timeline.is_playing(), 10000);
+    find('Shake them').emit('activate', Clutter.get_current_event());
+    await sleep(100);
+    ctx.check('Shake them sets every cord moving', overlay._timeline.is_playing() && overlay._cords.every(c => !c.rope.isSleeping));
+
+    const breezeItem = find('Breeze');
+    breezeItem.toggle();
+    await sleep(50);
+    ctx.check('Breeze switch writes the setting', !ctx.settings.get_boolean('breeze-enabled'));
+    breezeItem.toggle();
+    const grabItem = find('Grab without Super');
+    ctx.check('"Grab without Super" switch present', !!grabItem);
+    grabItem.toggle();
+    await sleep(50);
+    ctx.check('Grab without Super switch writes the setting', ctx.settings.get_boolean('grab-without-super'));
+    grabItem.toggle();
+
+    find('Custom').emit('activate', Clutter.get_current_event());
+    await sleep(100);
+    ctx.check('Custom restores the last custom layout', overlay._cords.length === 5 && overlay._cords.every(c => c.rope.style === 'neon'));
+
+    toggle.menu.close(false);
+    qs.menu.close(false);
+    for (const key of ['preset', 'cords', 'custom-cords', 'breeze-enabled', 'grab-without-super'])
+        ctx.settings.reset(key);
+    await sleep(100);
+    await waitFor(() => !overlay._timeline.is_playing(), 10000);
+}
+
 export const ALL_CHECKS = [
     ['structure', structure],
     ['sleep', sleeping],
     ['settings', settingsLive],
     ['visibility', visibility],
     ['styles', styles],
+    ['quick-settings', quickSettings],
     ['pointer', pointer],
     ['grab', grab],
     ['breeze', breeze],

@@ -23,27 +23,20 @@ function writeKey(settings, key, cords) {
 /**
  * Saves a user edit: the live layout becomes the Custom preset, and is
  * remembered so choosing Custom again brings it back.
+ *
+ * (Not Gio.Settings.delay(): that switches the shared settings object into
+ * delay-apply mode for good, and every later write would stop reaching dconf.)
  */
 export function writeCustomCords(settings, cords) {
-    settings.delay();
-    try {
-        const clean = writeKey(settings, 'cords', cords);
-        writeKey(settings, 'custom-cords', clean);
-        if (settings.get_string('preset') !== 'custom')
-            settings.set_string('preset', 'custom');
-    } finally {
-        settings.apply();
-    }
+    const clean = writeKey(settings, 'cords', cords);
+    writeKey(settings, 'custom-cords', clean);
+    if (settings.get_string('preset') !== 'custom')
+        settings.set_string('preset', 'custom');
 }
 
 /** Switches to a preset, loading its layout (or the remembered custom one). */
 export function applyPreset(settings, id) {
     const cords = presetCords(id) ?? readCords(settings, 'custom-cords');
-    settings.delay();
-    try {
-        settings.set_string('preset', id);
-        writeKey(settings, 'cords', cords);
-    } finally {
-        settings.apply();
-    }
+    settings.set_string('preset', id);
+    writeKey(settings, 'cords', cords);
 }

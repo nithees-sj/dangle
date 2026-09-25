@@ -20,23 +20,30 @@ const SHADOW_DX = 1;
 const SHADOW_DY = 2;
 const RAD_TO_DEG = 180 / Math.PI;
 
-/** Link colours for each texture: alternating links read as twist, braid or chain. */
-function bodyCss(appearance, thin) {
-    const {palette: p, texture} = appearance;
-    const edge = thin ? '' : ` border: 1px solid ${rgba(p.deep, 0.55)};`;
+/**
+ * Ropes are drawn a little bolder than the style's nominal width, which is
+ * measured against a charm the size of Hangly's; ours are smaller.
+ */
+const WIDTH_BOOST = 1.4;
+
+/**
+ * Link colours for each texture. Links are ~7 px long, so alternating colours
+ * read as twist, braid or chain; no borders, which would swamp a 2–3 px rope
+ * (the cloned shadow keeps it visible on light backgrounds).
+ */
+function bodyCss({palette: p, texture}) {
+    const bg = (color, alpha = 1) => `background-color: ${rgba(color, alpha)};`;
     switch (texture.kind) {
     case 'twist':
-        return i => `background-color: ${rgba(i % 2 ? p.shade : p.base)};${edge}`;
+        return i => bg(i % 2 ? p.shade : p.base);
     case 'braid':
-        return i => `background-color: ${rgba([p.base, p.shade, p.light][i % 3], i % 3 === 2 ? 0.9 : 1)};${edge}`;
+        return i => bg([p.base, p.shade, p.light][i % 3], i % 3 === 2 ? 0.85 : 1);
     case 'links':
-        return i => (i % 2
-            ? `background-color: ${rgba(p.shade)}; border: 1px solid ${rgba(p.deep, 0.8)};`
-            : `background-color: ${rgba(p.light)}; border: 1px solid ${rgba(p.deep, 0.8)};`);
+        return i => bg(i % 2 ? p.shade : p.light);
     case 'web':
-        return i => `background-color: ${rgba(i % 3 ? p.base : p.light)}; border: 1px solid ${rgba(p.shade, 0.5)};`;
+        return i => bg(i % 3 ? p.base : p.light);
     default:
-        return () => `background-color: ${rgba(p.base)};${edge}`;
+        return () => bg(p.base);
     }
 }
 
@@ -191,14 +198,14 @@ export class Cord {
         const style = this.rope.style;
         const appearance = appearanceOf(style);
         const bottom = this.rope.slots.at(-1)?.radius ?? 20;
-        const width = Math.max(1, ropeWidth(style, bottom / this._scale, this._look.thickness) * this._scale);
+        const width = Math.max(1, ropeWidth(style, bottom / this._scale, this._look.thickness) * WIDTH_BOOST * this._scale);
         const rest = this.rope.segmentLength;
         const key = `${style}|${width}|${rest}|${this._look.shadow}`;
         if (key === this._styleKey)
             return;
         this._styleKey = key;
 
-        this._body.setStyle(bodyCss(appearance, width < 2.5 * this._scale), width, rest, this._scale);
+        this._body.setStyle(bodyCss(appearance), width, rest, this._scale);
 
         this._glowOn = appearance.glow > 0;
         this._glow.setStyle(() => `background-color: ${rgba(appearance.palette.base, 0.3 * appearance.glow)};`,

@@ -429,11 +429,28 @@ async function reducedMotion(ctx) {
     overlay._syncBreeze();
 }
 
+async function styles(ctx) {
+    const overlay = ctx.overlay();
+    const all = ['thread', 'leather', 'gold-chain', 'silver-chain', 'neon', 'spider-thread', 'midnight-cord', 'temple-thread', 'silver-cord'];
+    for (const [batch, list] of [[1, all.slice(0, 5)], [2, all.slice(5)]]) {
+        ctx.settings.set_value('cords', new GLib.Variant(CORDS, list.map((style, i) =>
+            [0.1 + i * 0.2, 160, style, i % 2 ? ['builtin:star', 'builtin:crescent'] : ['builtin:crescent']])));
+        // eslint-disable-next-line no-await-in-loop
+        await waitFor(() => !overlay._timeline.is_playing(), 10000);
+        ctx.check(`style batch ${batch} applied`, overlay._cords.every((c, i) => c.rope.style === list[i]));
+        // eslint-disable-next-line no-await-in-loop
+        await ctx.screenshot(`styles-${batch}`, 0, 0, 1920, 260);
+    }
+    ctx.settings.reset('cords');
+    await waitFor(() => !overlay._timeline.is_playing(), 10000);
+}
+
 export const ALL_CHECKS = [
     ['structure', structure],
     ['sleep', sleeping],
     ['settings', settingsLive],
     ['visibility', visibility],
+    ['styles', styles],
     ['pointer', pointer],
     ['grab', grab],
     ['breeze', breeze],

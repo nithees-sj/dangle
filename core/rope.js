@@ -11,6 +11,8 @@
 //   - alternating-direction sweeps capped at ≤ 48 passes with early exit
 //   - a ceiling: nothing rises above the anchor (the panel's bottom edge)
 //   - an O(n) follow-the-leader guard that makes the stretch ceiling exact
+//   - elastic stretch while a charm is held (up to MAX_ELASTIC), sprung back
+//     to the rope's own length on release
 //   - a settle envelope + rest assist so every style sleeps within 5 s
 //
 // Units are pixels and seconds; y grows downward. All state lives in
@@ -38,6 +40,17 @@ const NUDGE_REACH = 24;
 const NUDGE_MIN_SPEED = 40;
 const NUDGE_TRANSFER = 0.35;
 const NUDGE_MAX_SPEED = 450;
+
+// Elastic stretch: while a charm is held the rope may stretch up to MAX_ELASTIC
+// times its length (so it follows the pointer down, not only sideways). The
+// stretch follows the pointer at ELASTIC_FOLLOW per second, and on release a
+// damped spring (RECOIL_OMEGA rad/s, RECOIL_ZETA of critical) pulls the rope back
+// to its own length, bouncing the charm home.
+export const MAX_ELASTIC = 1.6;
+const ELASTIC_FOLLOW = 20;
+const RECOIL_OMEGA = 11;
+const RECOIL_ZETA = 0.45;
+const MIN_ELASTIC = 0.85;
 
 // Alternations of the guard between the anchor and a held node.
 const GUARD_SWEEPS = 4;
@@ -112,6 +125,9 @@ export class Rope {
         this._dragVY = 0;
         this._windX = 0;
         this._windY = 0;
+        this._elastic = 1;
+        this._elasticVelocity = 0;
+        this._elasticDemand = 1;
 
         this._layout();
         this.reset(angle ?? (reducedMotion ? 0 : DEFAULTS.initialAngle));
@@ -123,6 +139,11 @@ export class Rope {
 
     get isDragging() {
         return this._drag >= 0;
+    }
+
+    /** How far the rope is stretched right now (1 = its own length). */
+    get elastic() {
+        return this._elastic;
     }
 
     /** Index of the held charm in `slots`, or -1. */
@@ -142,6 +163,9 @@ export class Rope {
         }
         this._accumulator = 0;
         this._drag = -1;
+        this._elastic = 1;
+        this._elasticVelocity = 0;
+        this._elasticDemand = 1;
         this._disturb();
     }
 
@@ -437,16 +461,41 @@ export class Rope {
     }
 
     _setDragTarget(x, y) {
-        // Only the rope above the held node can hold it back.
-        const reach = this._drag * this.segmentLength * DEFAULTS.reachRatio;
-        let dx = x - this.anchorX, dy = y - this.anchorY;
+        // Only the rope above the held node can hold it back; pulling past its
+        // length stretches it, up to MAX_ELASTIC.
+        const natural = this._drag * this.segmentLength * DEFAULTS.reachRatio;
+        const reach = natural * MAX_ELASTIC;
+        let dx = x - this.anchorX, dy = Math.max(0, y - this.anchorY);
         const d = Math.hypot(dx, dy);
         if (d > reach && d > EPSILON) {
             dx *= reach / d;
             dy *= reach / d;
         }
         this._dragX = this.anchorX + dx;
-        this._dragY = this.anchorY + Math.max(0, dy);
+        this._dragY = this.anchorY + dy;
+        this._elasticDemand = natural > EPSILON ? Math.max(1, Math.min(MAX_ELASTIC, Math.hypot(dx, dy) / natural)) : 1;
+    }
+
+    /** Eases the stretch toward the pointer while held; springs it back after. */
+    _advanceElastic(h) {
+        const before = this._elastic;
+        if (this._drag >= 0) {
+            this._elastic += (this._elasticDemand - this._elastic) * Math.min(1, ELASTIC_FOLLOW * h);
+            this._elasticVelocity = (this._elastic - before) / h;
+            return;
+        }
+        if (this._elastic === 1 && this._elasticVelocity === 0)
+            return;
+        const w = RECOIL_OMEGA;
+        const accel = -w * w * (this._elastic - 1) - 2 * RECOIL_ZETA * w * this._elasticVelocity;
+        this._elasticVelocity += accel * h;
+        this._elastic = Math.max(MIN_ELASTIC, Math.min(MAX_ELASTIC, this._elastic + this._elasticVelocity * h));
+        if (Math.abs(this._elastic - 1) < 1e-4 && Math.abs(this._elasticVelocity) < 1e-3) {
+            this._elastic = 1;
+            this._elasticVelocity = 0;
+        }
+        // Still recoiling counts as a disturbance: the settle envelope waits for it.
+        this._since = 0;
     }
 
     _advance(h) {
@@ -459,6 +508,8 @@ export class Rope {
             this._since = 0;
         else
             this._since += h;
+        this._advanceElastic(h);
+        const rest = this.segmentLength * this._elastic;
 
         // Settle envelope.
         const hold = this.reducedMotion ? REDUCED_HOLD : SETTLE_HOLD;
@@ -509,15 +560,15 @@ export class Rope {
         //    stopping after a lone forward sweep on some substeps and a backward
         //    one on others leaves a sub-pixel flicker that never settles.
         for (let it = 0; it < p.iterations; it += 2) {
-            const forward = this._relax(false);
-            const backward = this._relax(true);
+            const forward = this._relax(false, rest);
+            const backward = this._relax(true, rest);
             const residual = Math.max(forward, backward, this._separateCharms());
             if (residual < DEFAULTS.tolerance)
                 break;
         }
 
         // 5. Stretch ceiling, then the ceiling, then the exact guard.
-        const limit = this.segmentLength * p.maxStretch;
+        const limit = rest * p.maxStretch;
         for (let pass = 0; pass < p.stretchPasses; pass++) {
             if (!this._clampStretch(limit, pass & 1))
                 break;
@@ -527,15 +578,15 @@ export class Rope {
     }
 
     /** One Gauss-Seidel sweep over every link. @returns largest correction */
-    _relax(backward) {
+    _relax(backward, rest) {
         const n = this.pointCount;
         let worst = 0;
         if (backward) {
             for (let i = n - 2; i >= 0; i--)
-                worst = Math.max(worst, this._solveLink(i, this.segmentLength, false));
+                worst = Math.max(worst, this._solveLink(i, rest, false));
         } else {
             for (let i = 0; i < n - 1; i++)
-                worst = Math.max(worst, this._solveLink(i, this.segmentLength, false));
+                worst = Math.max(worst, this._solveLink(i, rest, false));
         }
         return worst;
     }
@@ -693,7 +744,7 @@ export class Rope {
      * never freezes at a tilt.
      */
     _updateSleep(dt) {
-        if (this._drag >= 0 || this._windX !== 0 || this._windY !== 0) {
+        if (this._drag >= 0 || this._windX !== 0 || this._windY !== 0 || this._elastic !== 1) {
             this._still = 0;
             return;
         }

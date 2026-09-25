@@ -57,6 +57,19 @@ export class SegmentLayer {
     }
 
     /**
+     * Lengthens or shortens every link (the rope is being stretched or is
+     * springing back). Only called when the length changes visibly.
+     */
+    setRestLength(restLength) {
+        this._restLength = restLength;
+        const full = restLength + this._thickness;
+        this._segments.forEach((segment, k) => {
+            if (k !== this._lastIndex)
+                segment.width = full;
+        });
+    }
+
+    /**
      * Lays the links along the rope: nodes 0 … last, then on to (endX, endY).
      * (dx, dy) offsets the whole layer (used by the shadow).
      */

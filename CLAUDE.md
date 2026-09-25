@@ -22,7 +22,11 @@ User shell is **fish** — write any commands for fish.
 - Verlet, 20 segments, fixed 1/240 s substeps, dt capped at 50 ms.
 - Relaxation (12–20, in forward+backward pairs) and stretch passes (8–10) per
   style, capped at 48, early exit at 0.1 px, plus an O(n) follow-the-leader
-  guard: links never exceed 1.02× rest length.
+  guard: at rest links never exceed 1.02× their length.
+- Elastic pull (user request): while a charm is held its rope may stretch up to
+  `MAX_ELASTIC` (1.6×) toward the pointer, including straight down; on release
+  a damped spring returns it to its own length (a small bounce). A rope cannot
+  sleep until it is back to exactly 1×.
 - Ceiling constraint: no node rises above the anchor (panel bottom).
 - Every style sleeps within 5 s after a push: damping ramps to critical (per
   rope length) 1–2 s after the last disturbance; sleep = <0.35 px drift in

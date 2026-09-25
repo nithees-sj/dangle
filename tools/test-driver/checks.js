@@ -487,7 +487,7 @@ async function quickSettings(ctx) {
 
     const items = toggle.menu._getMenuItems();
     const find = text => items.find(i => labelOf(i) === text);
-    ctx.check('menu has the four presets', ['Festive', 'Minimal', 'Spooky', 'Custom'].every(t => find(t)));
+    ctx.check('menu has the five presets', ['Festive', 'Temple', 'Minimal', 'Spooky', 'Custom'].every(t => find(t)));
 
     // Screenshot the open menu.
     qs.menu.open(false);
@@ -609,7 +609,7 @@ async function prefs(ctx) {
     ctx.check('overlay: charm from the library', cords[1].charmIds[0] === 'builtin:lotus', cords[1].charmIds.join());
     ctx.check('overlay: charm size from prefs', cords[1].charmActors[0].icon_size === 50, `${cords[1].charmActors[0].icon_size}`);
     ctx.check('overlay: shadow off from prefs', !cords[0]._shadow.visible);
-    for (const key of ['cords', 'custom-cords', 'preset', 'active-cord', 'charm-size', 'shadow', 'grab-modifier'])
+    for (const key of ['cords', 'custom-cords', 'preset', 'active-cord', 'charm-size', 'rope-thickness', 'shadow', 'grab-modifier'])
         ctx.settings.reset(key);
     await sleep(100);
     await waitFor(() => !overlay._timeline.is_playing(), 10000);
@@ -619,7 +619,7 @@ async function prefs(ctx) {
 
 async function presets(ctx) {
     const overlay = ctx.overlay();
-    const counts = {festive: 5, minimal: 2, spooky: 4};
+    const counts = {festive: 5, temple: 4, minimal: 2, spooky: 4};
     const settingsModel = await import(ctx.dangle().dir.get_child('settingsModel.js').get_uri());
     for (const [id, count] of Object.entries(counts)) {
         settingsModel.applyPreset(ctx.settings, id);
@@ -782,6 +782,50 @@ function monitors(ctx) {
     ctx.check('monitors-changed rebuilds the cords', overlay._cords[0] !== before && overlay._cords.length === 2);
 }
 
+// ── elastic pull: drag down, spring back ───────────────────────────────────
+
+async function elastic(ctx) {
+    const overlay = ctx.overlay();
+    const {pointer: dev, keyboard} = devices();
+    await moveTo(dev, 300, 900);
+    await waitFor(() => !overlay._timeline.is_playing(), 10000);
+    const cord = overlay._cords[0];
+    const rope = cord.rope;
+    const end = rope.pointCount - 1;
+    const restY = rope.y[end];
+    const charm = bottomCharm(overlay);
+
+    await moveTo(dev, charm.x, charm.y);
+    await sleep(300);
+    await waitFor(() => !overlay._timeline.is_playing(), 10000);
+    keyboard.notify_keyval(now(), Clutter.KEY_Super_L, Clutter.KeyState.PRESSED);
+    await waitFor(() => charm.actor.reactive, 1000);
+    dev.notify_button(now(), BTN_LEFT, Clutter.ButtonState.PRESSED);
+    await sleep(60);
+    ctx.check('Super+press grabs the charm for an elastic pull', overlay._input.dragging);
+    // Pull straight down, well past the rope's own length.
+    for (let i = 1; i <= 12; i++)
+        // eslint-disable-next-line no-await-in-loop
+        await moveTo(dev, charm.x, charm.y + i * 10);
+    await sleep(500);
+    const pulled = rope.y[end] - rope.anchorY, restDrop = restY - rope.anchorY;
+    ctx.check('dragging down stretches the rope well past its own length', pulled > restDrop * 1.4,
+              `${Math.round(pulled)} px vs ${Math.round(restDrop)} px at rest (elastic ${rope.elastic.toFixed(2)})`);
+    ctx.check('…straight down, not sideways', Math.abs(rope.x[end] - rope.anchorX) < 6);
+    await ctx.screenshot('elastic-pull', 0, 0, 1920, 420);
+    dev.notify_button(now(), BTN_LEFT, Clutter.ButtonState.RELEASED);
+    keyboard.notify_keyval(now(), Clutter.KEY_Super_L, Clutter.KeyState.RELEASED);
+    await moveTo(dev, 300, 900);
+    const ms = await waitFor(() => !overlay._timeline.is_playing(), 10000);
+    ctx.check('on release it springs back and comes to rest', ms >= 0 && ms < 6000, `${Math.round(ms)} ms`);
+    ctx.check('…at its original length', Math.abs(rope.y[end] - restY) < 3 && rope.elastic === 1,
+              `${Math.round(rope.y[end] - rope.anchorY)} px vs ${Math.round(restDrop)} px`);
+    if (Main.overview.visible) {
+        Main.overview.hide();
+        await waitFor(() => !Main.overview.visible, 3000);
+    }
+}
+
 export const ALL_CHECKS = [
     ['structure', structure],
     ['sleep', sleeping],
@@ -793,6 +837,7 @@ export const ALL_CHECKS = [
     ['prefs', prefs],
     ['pointer', pointer],
     ['grab', grab],
+    ['elastic', elastic],
     ['breeze', breeze],
     ['reduced-motion', reducedMotion],
     ['windows', windows],

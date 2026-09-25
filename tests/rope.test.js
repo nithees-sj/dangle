@@ -1,11 +1,13 @@
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
 
-import {Rope, SETTLE_LIMIT} from '../core/rope.js';
+import {Rope, SETTLE_LIMIT, MAX_ELASTIC} from '../core/rope.js';
 import {DEFAULTS, STYLE_IDS} from '../core/ropeStyles.js';
 import {mulberry32, stretchOf, allFinite, timeToSleep} from './helpers.js';
 
 const STRETCH_LIMIT = 1.02 + 1e-9;
+/** While held, a rope may stretch elastically (and keep its style's give on top). */
+const HELD_LIMIT = MAX_ELASTIC * 1.02 + 1e-9;
 const ANCHOR = {anchorX: 500, anchorY: 32};
 
 function hanging(opts = {}) {
@@ -50,7 +52,7 @@ test('push() wakes a sleeping rope and moves it sideways', () => {
 });
 
 for (const style of STYLE_IDS) {
-    test(`${style}: never stretches beyond 1.02× under violent drags`, () => {
+    test(`${style}: stretches at most ${MAX_ELASTIC}× while held, and back to ≤ 1.02× after`, () => {
         const rng = mulberry32(style.length * 7919);
         for (const count of [1, 3]) {
             const rope = new Rope({...ANCHOR, length: 140, style, charmCount: count, angle: 0});
@@ -62,13 +64,15 @@ for (const style of STYLE_IDS) {
                     const ty = 32 + (rng() - 0.3) * 1200;
                     rope.updateDrag(tx, ty, (rng() - 0.5) * 20000, (rng() - 0.5) * 20000);
                     rope.step(rng() * 0.05);
-                    assert.ok(stretchOf(rope) <= STRETCH_LIMIT, `stretch ${stretchOf(rope)} while dragging`);
+                    assert.ok(stretchOf(rope) <= HELD_LIMIT, `stretch ${stretchOf(rope)} while dragging`);
                 }
                 rope.endDrag();
-                for (let f = 0; f < 120; f++) {
+                for (let f = 0; f < 600 && !rope.isSleeping; f++) {
                     rope.step(1 / 60);
-                    assert.ok(stretchOf(rope) <= STRETCH_LIMIT, `stretch ${stretchOf(rope)} after release`);
+                    assert.ok(stretchOf(rope) <= HELD_LIMIT, `stretch ${stretchOf(rope)} while recoiling`);
                 }
+                assert.equal(rope.elastic, 1, 'springs back to its own length');
+                assert.ok(stretchOf(rope) <= STRETCH_LIMIT, `stretch ${stretchOf(rope)} at rest`);
             }
         }
     });
@@ -115,7 +119,9 @@ test('stable under 1000 random pushes, drags, gusts and dt spikes', () => {
             const dt = rng() < 0.05 ? rng() : rng() * 0.05;
             rope.step(dt);
             assert.ok(allFinite(rope), `${style}: finite at ${i}`);
-            assert.ok(stretchOf(rope) <= STRETCH_LIMIT, `${style}: stretch ${stretchOf(rope)} at ${i}`);
+            assert.ok(stretchOf(rope) <= HELD_LIMIT, `${style}: stretch ${stretchOf(rope)} at ${i}`);
+            if (!rope.isDragging && rope.elastic === 1)
+                assert.ok(stretchOf(rope) <= STRETCH_LIMIT, `${style}: rest stretch ${stretchOf(rope)} at ${i}`);
             for (let n = 0; n < rope.pointCount; n++)
                 assert.ok(rope.y[n] >= rope.anchorY - 1e-9, `${style}: node ${n} above the bar at ${i}`);
         }
@@ -140,7 +146,7 @@ test('nothing rises above the anchor, even when dragged there', () => {
     }
 });
 
-test('drag reach is clamped to the rope above the held node', () => {
+test('drag reach is clamped to the (stretched) rope above the held node', () => {
     for (const count of [1, 3]) {
         const rope = new Rope({...ANCHOR, length: 140, charmCount: count, angle: 0});
         const slot = rope.slots[0];
@@ -150,8 +156,9 @@ test('drag reach is clamped to the rope above the held node', () => {
             rope.step(1 / 60);
         }
         const reach = Math.hypot(rope.x[slot.node] - 500, rope.y[slot.node] - 32);
-        assert.ok(reach <= slot.node * rope.segmentLength * DEFAULTS.reachRatio + 1e-6, `reach ${reach}`);
-        assert.ok(reach > slot.node * rope.segmentLength * 0.9, 'but does get pulled out');
+        const natural = slot.node * rope.segmentLength * DEFAULTS.reachRatio;
+        assert.ok(reach <= natural * MAX_ELASTIC + 1e-6, `reach ${reach}`);
+        assert.ok(reach > natural * (MAX_ELASTIC - 0.1), 'stretches most of the way out');
     }
 });
 
@@ -293,4 +300,46 @@ test('cordEnd reports the segment it lies on', () => {
     const j = end.segment;
     assert.ok(j >= 1 && j <= rope.pointCount - 1);
     assert.ok(rope.y[j - 1] <= end.y + 1e-9 && end.y <= rope.y[j] + 1e-9);
+});
+
+test('dragging straight down stretches the rope, and it springs back on release', () => {
+    const rope = hanging();
+    const end = rope.pointCount - 1;
+    const restDrop = rope.y[end] - 32;
+    rope.beginDrag(rope.x[end], rope.y[end]);
+    for (let f = 0; f < 90; f++) {
+        rope.updateDrag(500, 32 + 140 * 1.45, 0, 0);
+        rope.step(1 / 60);
+    }
+    const heldDrop = rope.y[end] - 32;
+    assert.ok(heldDrop > 140 * 1.35, `pulled down to ${heldDrop.toFixed(1)} px (rope 140 px)`);
+    assert.ok(rope.elastic > 1.35, `elastic ${rope.elastic}`);
+    assert.ok(Math.abs(rope.x[end] - 500) < 2, 'straight down, not sideways');
+
+    rope.endDrag();
+    let highest = Infinity;
+    for (let f = 0; f < 30; f++) {
+        rope.step(1 / 60);
+        highest = Math.min(highest, rope.y[end] - 32);
+    }
+    assert.ok(highest < restDrop, `recoils up past its rest length (to ${highest.toFixed(1)} px): a bounce`);
+    const secs = timeToSleep(rope);
+    assert.ok(secs <= SETTLE_LIMIT, `back at rest in ${secs.toFixed(2)} s`);
+    assert.equal(rope.elastic, 1);
+    const drop = rope.y[end] - 32;
+    assert.ok(Math.abs(drop - restDrop) < 2, `home again: ${drop.toFixed(1)} vs ${restDrop.toFixed(1)} px`);
+});
+
+test('a rope that is still recoiling does not fall asleep', () => {
+    const rope = hanging();
+    const end = rope.pointCount - 1;
+    rope.beginDrag(rope.x[end], rope.y[end]);
+    for (let f = 0; f < 30; f++) {
+        rope.updateDrag(500, 300, 0, 0);
+        rope.step(1 / 60);
+    }
+    rope.endDrag();
+    rope.step(1 / 60);
+    assert.equal(rope.isSleeping, false);
+    assert.notEqual(rope.elastic, 1);
 });

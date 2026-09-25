@@ -4,6 +4,8 @@ import Adw from 'gi://Adw';
 import Gio from 'gi://Gio';
 import Gtk from 'gi://Gtk';
 
+import {sliderRow} from './widgets.js';
+
 const MODIFIERS = [['super', 'Super'], ['alt', 'Alt'], ['ctrl-alt', 'Ctrl+Alt']];
 
 function switchRow(settings, key, title, subtitle) {
@@ -18,26 +20,31 @@ export function appearancePage(model) {
 
     // ── look ───────────────────────────────────────────────────────────────
     const look = new Adw.PreferencesGroup({title: 'Look'});
-    const size = new Adw.SpinRow({
+    const size = sliderRow({
         title: 'Charm size',
-        subtitle: 'Diameter of a lone charm, in pixels',
-        adjustment: new Gtk.Adjustment({lower: 24, upper: 96, step_increment: 2, page_increment: 8}),
+        subtitle: 'Diameter of a lone charm',
+        lower: 24,
+        upper: 96,
+        step: 2,
+        value: settings.get_int('charm-size'),
+        format: v => `${v} px`,
+        onChange: v => settings.set_int('charm-size', v),
     });
-    size.value = settings.get_int('charm-size');
-    size.connect('notify::value', () => settings.set_int('charm-size', Math.round(size.value)));
-    model.watch('charm-size', () => {
-        if (Math.round(size.value) !== settings.get_int('charm-size'))
-            size.value = settings.get_int('charm-size');
-    });
+    model.watch('charm-size', () => size.setValue(settings.get_int('charm-size')));
     look.add(size);
 
-    const thickness = new Adw.SpinRow({
+    const thickness = sliderRow({
         title: 'Rope thickness',
         subtitle: 'Multiplies each rope style’s own width',
-        digits: 1,
-        adjustment: new Gtk.Adjustment({lower: 0.5, upper: 2.5, step_increment: 0.1, page_increment: 0.5}),
+        lower: 0.5,
+        upper: 2.5,
+        step: 0.1,
+        value: settings.get_double('rope-thickness'),
+        format: v => `${v.toFixed(1)}×`,
+        marks: [1],
+        onChange: v => settings.set_double('rope-thickness', v),
     });
-    settings.bind('rope-thickness', thickness, 'value', Gio.SettingsBindFlags.DEFAULT);
+    model.watch('rope-thickness', () => thickness.setValue(settings.get_double('rope-thickness')));
     look.add(thickness);
     look.add(switchRow(settings, 'shadow', 'Shadow', 'A soft shadow under each rope'));
     page.add(look);
@@ -45,18 +52,18 @@ export function appearancePage(model) {
     // ── breeze ─────────────────────────────────────────────────────────────
     const breeze = new Adw.PreferencesGroup({title: 'Breeze', description: 'A short gust every 45 to 120 seconds.'});
     breeze.add(switchRow(settings, 'breeze-enabled', 'Breeze', null));
-    const strengthRow = new Adw.ActionRow({title: 'Strength'});
-    const strength = new Gtk.Scale({
-        adjustment: new Gtk.Adjustment({lower: 0, upper: 1, step_increment: 0.05, page_increment: 0.1}),
-        draw_value: false,
-        hexpand: true,
-        valign: Gtk.Align.CENTER,
-        width_request: 200,
+    const strength = sliderRow({
+        title: 'Strength',
+        lower: 0,
+        upper: 1,
+        step: 0.05,
+        value: settings.get_double('breeze-strength'),
+        format: v => `${Math.round(v * 100)} %`,
+        onChange: v => settings.set_double('breeze-strength', v),
     });
-    settings.bind('breeze-strength', strength.adjustment, 'value', Gio.SettingsBindFlags.DEFAULT);
-    settings.bind('breeze-enabled', strengthRow, 'sensitive', Gio.SettingsBindFlags.GET);
-    strengthRow.add_suffix(strength);
-    breeze.add(strengthRow);
+    model.watch('breeze-strength', () => strength.setValue(settings.get_double('breeze-strength')));
+    settings.bind('breeze-enabled', strength, 'sensitive', Gio.SettingsBindFlags.GET);
+    breeze.add(strength);
     breeze.add(switchRow(settings, 'breeze-on-battery', 'Breeze on battery',
                          'Off by default: gusts pause while the laptop is unplugged'));
     page.add(breeze);

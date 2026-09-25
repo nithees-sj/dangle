@@ -34,6 +34,11 @@ test('every built-in charm used by a preset has artwork', () => {
     }
 });
 
+test('the Temple preset hangs the Vel and the Aruval', () => {
+    const charms = presetCords('temple').flatMap(c => c[3]);
+    assert.ok(charms.includes('builtin:vel') && charms.includes('builtin:aruval'));
+});
+
 test('the symbolic icon is a 16×16 SVG', () => {
     const icon = readFileSync(new URL('../extension/icons/dangle-symbolic.svg', import.meta.url), 'utf8');
     assert.match(icon, /viewBox="0 0 16 16"/);

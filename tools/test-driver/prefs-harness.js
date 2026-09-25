@@ -39,6 +39,9 @@ function findAll(widget, predicate, found = []) {
     return found;
 }
 
+/** The slider in the row titled `title` under `root`. */
+const slider = (root, title) => findAll(root, w => w._dangleScale && w.title === title)[0]?._dangleScale;
+
 function snapshot(window, name) {
     const paintable = new Gtk.WidgetPaintable({widget: window});
     const width = window.get_width(), height = window.get_height();
@@ -81,11 +84,25 @@ async function run(window) {
     window.visible_page_name = 'cords';
     await wait(200);
     const cordsPage = window.visible_page;
-    const spins = findAll(cordsPage, w => w instanceof Adw.SpinRow);
-    const lengthRow = spins.find(w => w.title === 'Length');
-    lengthRow.value = 200;
-    await wait(100);
-    check('length spin writes the cord', settings.get_value('cords').deepUnpack()[0][1] === 200);
+    check('no +/− spin buttons left: every number is a slider', findAll(window, w => w instanceof Adw.SpinRow).length === 0);
+    // Drag the length slider to the right, a little at a time, like a hand would.
+    const lengthSlider = slider(cordsPage, 'Length');
+    const seen = new Set();
+    for (let v = 120; v <= 200; v += 8) {
+        lengthSlider.adjustment.value = v;
+        // eslint-disable-next-line no-await-in-loop
+        await wait(25);
+        seen.add(settings.get_value('cords').deepUnpack()[0][1]);
+    }
+    lengthSlider.adjustment.value = 200;
+    await wait(120);
+    check('dragging the length slider right lengthens the cord', settings.get_value('cords').deepUnpack()[0][1] === 200);
+    check('…and applies live while dragging', seen.size >= 3, `${seen.size} intermediate values`);
+    const positionSlider = slider(cordsPage, 'Position');
+    positionSlider.adjustment.value = 12.4;
+    await wait(120);
+    check('dragging the position slider left moves the cord (snapped to 1 %)',
+          Math.abs(settings.get_value('cords').deepUnpack()[0][0] - 0.12) < 1e-9);
     const styleRow = findAll(cordsPage, w => w instanceof Adw.ComboRow && w.title === 'Rope style')[0];
     styleRow.selected = 2; // Gold Chain
     await wait(100);
@@ -93,11 +110,11 @@ async function run(window) {
 
     // Preset combo: switch to Spooky and back to Custom through the widget.
     const presetRow = findAll(cordsPage, w => w instanceof Adw.ComboRow && w.title === 'Layout')[0];
-    presetRow.selected = 2; // Spooky
+    presetRow.selected = 3; // Spooky
     await wait(150);
     check('preset combo applies Spooky', settings.get_string('preset') === 'spooky' &&
         settings.get_value('cords').deepUnpack().length === 4);
-    presetRow.selected = 3; // Custom
+    presetRow.selected = 4; // Custom
     await wait(150);
     check('preset combo restores Custom', settings.get_string('preset') === 'custom' &&
         settings.get_value('cords').deepUnpack()[0][2] === 'gold-chain');
@@ -106,11 +123,13 @@ async function run(window) {
     window.visible_page_name = 'appearance';
     await wait(200);
     const appearance = window.visible_page;
-    findAll(appearance, w => w instanceof Adw.SpinRow && w.title === 'Charm size')[0].value = 60;
+    slider(appearance, 'Charm size').adjustment.value = 60.7;
+    slider(appearance, 'Rope thickness').adjustment.value = 1.62;
     const shadow = findAll(appearance, w => w instanceof Adw.SwitchRow && w.title === 'Shadow')[0];
     shadow.active = false;
     await wait(100);
-    check('charm size spin writes the setting', settings.get_int('charm-size') === 60);
+    check('charm size slider writes the setting (snapped to 2 px)', settings.get_int('charm-size') === 60);
+    check('rope thickness slider writes the setting (snapped to 0.1)', Math.abs(settings.get_double('rope-thickness') - 1.6) < 1e-9);
     check('shadow switch writes the setting', settings.get_boolean('shadow') === false);
     const modifier = findAll(appearance, w => w instanceof Adw.ComboRow && w.title === 'Grab modifier')[0];
     modifier.selected = 2;
@@ -120,7 +139,8 @@ async function run(window) {
     // An outside change (e.g. from Quick Settings) must show up in the pages.
     settings.set_int('charm-size', 50);
     await wait(100);
-    check('outside changes show up live', Math.round(findAll(appearance, w => w instanceof Adw.SpinRow && w.title === 'Charm size')[0].value) === 50);
+    check('outside changes move the slider', Math.round(slider(appearance, 'Charm size').adjustment.value) === 50);
+    check('…without writing back', settings.get_int('charm-size') === 50);
     snapshot(window, 'appearance-after');
 
     // ── Import ────────────────────────────────────────────────────────────

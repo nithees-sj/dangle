@@ -3,9 +3,11 @@ import assert from 'node:assert/strict';
 
 import {BUILTIN_CHARMS, DEFAULT_CHARM, parseCharmId, isCharmId, charmName, customFileNameFor, isCustomFileName} from '../core/charms.js';
 
-test('twelve built-in charms with unique ids', () => {
-    assert.equal(BUILTIN_CHARMS.length, 12);
-    assert.equal(new Set(BUILTIN_CHARMS.map(c => c.id)).size, 12);
+test('fourteen built-in charms with unique ids', () => {
+    assert.equal(BUILTIN_CHARMS.length, 14);
+    assert.equal(new Set(BUILTIN_CHARMS.map(c => c.id)).size, 14);
+    assert.ok(BUILTIN_CHARMS.some(c => c.id === 'builtin:vel'));
+    assert.ok(BUILTIN_CHARMS.some(c => c.id === 'builtin:aruval'));
     assert.ok(isCharmId(DEFAULT_CHARM));
 });
 

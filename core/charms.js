@@ -16,6 +16,8 @@ export const BUILTIN_CHARMS = Object.freeze([
     {id: 'builtin:pumpkin', name: 'Pumpkin'},
     {id: 'builtin:ghost', name: 'Ghost'},
     {id: 'builtin:snowflake', name: 'Snowflake'},
+    {id: 'builtin:vel', name: "Murugan's Vel"},
+    {id: 'builtin:aruval', name: "Karuppasamy's Aruval"},
 ].map(Object.freeze));
 
 export const DEFAULT_CHARM = 'builtin:star';

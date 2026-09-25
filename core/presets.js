@@ -11,6 +11,15 @@ export const PRESETS = Object.freeze({
             [0.78, 125, 'temple-thread', ['builtin:evil-eye']],
         ],
     }),
+    temple: Object.freeze({
+        name: 'Temple',
+        cords: [
+            [0.16, 175, 'temple-thread', ['builtin:vel']],
+            [0.24, 150, 'gold-chain', ['builtin:temple-bell', 'builtin:diya']],
+            [0.76, 180, 'midnight-cord', ['builtin:aruval']],
+            [0.84, 140, 'temple-thread', ['builtin:lotus', 'builtin:jasmine']],
+        ],
+    }),
     minimal: Object.freeze({
         name: 'Minimal',
         cords: [
@@ -29,7 +38,7 @@ export const PRESETS = Object.freeze({
     }),
 });
 
-export const PRESET_IDS = Object.freeze(['festive', 'minimal', 'spooky', 'custom']);
+export const PRESET_IDS = Object.freeze(['festive', 'temple', 'minimal', 'spooky', 'custom']);
 export const DEFAULT_PRESET = 'minimal';
 
 export function presetName(id) {

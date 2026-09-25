@@ -8,7 +8,10 @@ import {STYLE_IDS} from '../core/ropeStyles.js';
 import {isCharmId} from '../core/charms.js';
 
 test('preset ids match the schema choices', () => {
-    assert.deepEqual(PRESET_IDS, ['festive', 'minimal', 'spooky', 'custom']);
+    assert.deepEqual(PRESET_IDS, ['festive', 'temple', 'minimal', 'spooky', 'custom']);
+    const schema = readFileSync(new URL('../extension/schemas/org.gnome.shell.extensions.dangle.gschema.xml', import.meta.url), 'utf8');
+    const choices = [...schema.match(/<key name="preset"[\s\S]*?<\/key>/)[0].matchAll(/<choice value="([^"]+)"/g)].map(m => m[1]);
+    assert.deepEqual(choices, PRESET_IDS);
     assert.equal(DEFAULT_PRESET, 'minimal');
     assert.equal(presetName('custom'), 'Custom');
     assert.equal(presetCords('custom'), null);

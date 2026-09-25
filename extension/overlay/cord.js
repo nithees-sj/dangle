@@ -167,6 +167,15 @@ export class Cord {
     /** Moves every actor to where the rope is now. */
     sync() {
         const rope = this.rope;
+        // A stretched (or recoiling) rope has longer links: resize them when the
+        // change is visible, so a pulled rope never shows gaps.
+        const rest = rope.segmentLength * rope.elastic;
+        if (Math.abs(rest - this._drawnRest) >= 0.25) {
+            this._drawnRest = rest;
+            this._body.setRestLength(rest);
+            if (this._glowOn)
+                this._glow.setRestLength(rest);
+        }
         const end = rope.cordEnd(this._end);
         const last = end.segment - 1;
         this._body.update(rope.x, rope.y, last, end.x, end.y);
@@ -206,6 +215,7 @@ export class Cord {
         this._styleKey = key;
 
         this._body.setStyle(bodyCss(appearance), width, rest, this._scale);
+        this._drawnRest = rest;
 
         // Only a strong glow earns its own layer of moving links (Neon); a faint
         // one (Spider Thread's 0.26) is invisible at this width anyway.

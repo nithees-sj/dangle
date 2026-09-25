@@ -9,15 +9,7 @@ import {STYLES, styleName} from '../core/ropeStyles.js';
 import {MAX_CORDS, MIN_LENGTH, MAX_LENGTH, MIN_POSITION, MAX_POSITION, addCord, removeCord, setCharmCount} from '../core/cords.js';
 import {MAX_CHARMS} from '../core/charmLayout.js';
 import {applyPreset} from '../settingsModel.js';
-
-function spinRow(title, subtitle, lower, upper, step, value) {
-    return new Adw.SpinRow({
-        title,
-        subtitle,
-        digits: 0,
-        adjustment: new Gtk.Adjustment({lower, upper, step_increment: step, page_increment: step * 5, value}),
-    });
-}
+import {sliderRow} from './widgets.js';
 
 export function cordsPage(model) {
     const page = new Adw.PreferencesPage({title: 'Cords', icon_name: 'view-list-symbolic', name: 'cords'});
@@ -98,17 +90,40 @@ export function cordsPage(model) {
             });
             row.connect('notify::expanded', () => (row.expanded ? expanded.add(i) : expanded.delete(i)));
 
-            const position = spinRow('Position', 'Percent across the top bar',
-                                     MIN_POSITION * 100, MAX_POSITION * 100, 1, Math.round(cord[0] * 100));
-            position.connect('notify::value', () => edit(i, c => (c[0] = position.value / 100)));
+            const position = sliderRow({
+                title: 'Position',
+                subtitle: 'Across the top bar',
+                lower: MIN_POSITION * 100,
+                upper: MAX_POSITION * 100,
+                step: 1,
+                value: cord[0] * 100,
+                format: v => `${v} %`,
+                onChange: v => edit(i, c => (c[0] = v / 100)),
+            });
 
-            const length = spinRow('Length', 'Rope length in pixels', MIN_LENGTH, MAX_LENGTH, 5, Math.round(cord[1]));
-            length.connect('notify::value', () => edit(i, c => (c[1] = length.value)));
+            const length = sliderRow({
+                title: 'Length',
+                subtitle: 'How far the charms hang',
+                lower: MIN_LENGTH,
+                upper: MAX_LENGTH,
+                step: 5,
+                value: cord[1],
+                format: v => `${v} px`,
+                onChange: v => edit(i, c => (c[1] = v)),
+            });
 
-            const count = spinRow('Charms', 'Charms hanging on this cord', 1, MAX_CHARMS, 1, cord[3].length);
-            count.connect('notify::value', () => {
-                model.edit(cords => setCharmCount(cords, i, count.value));
-                row.subtitle = subtitleFor(model.cords[i]);
+            const count = sliderRow({
+                title: 'Charms',
+                subtitle: 'Charms hanging on this cord',
+                lower: 1,
+                upper: MAX_CHARMS,
+                step: 1,
+                value: cord[3].length,
+                marks: [1, 2, 3],
+                onChange: v => {
+                    model.edit(cords => setCharmCount(cords, i, v));
+                    row.subtitle = subtitleFor(model.cords[i]);
+                },
             });
 
             const style = new Adw.ComboRow({

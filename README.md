@@ -12,9 +12,16 @@ is controlled from Quick Settings.
 
 ## Screenshots
 
-| Festive | Spooky | Minimal (default) |
-|---|---|---|
-| ![Festive](docs/screenshots/preset-festive.png) | ![Spooky](docs/screenshots/preset-spooky.png) | ![Minimal](docs/screenshots/preset-minimal.png) |
+| Festive | Temple (Vel and Aruval) |
+|---|---|
+| ![Festive](docs/screenshots/preset-festive.png) | ![Temple](docs/screenshots/preset-temple.png) |
+| **Spooky** | **Minimal (default)** |
+| ![Spooky](docs/screenshots/preset-spooky.png) | ![Minimal](docs/screenshots/preset-minimal.png) |
+
+An elastic pull: the star's cord stretched well past its length, next to the
+crescent hanging at rest:
+
+![Elastic pull](docs/screenshots/elastic-pull.png)
 
 The nine rope styles — Thread, Leather, Gold Chain, Silver Chain, Neon, Spider
 Thread, Midnight Cord, Temple Thread, Silver Cord:
@@ -28,17 +35,22 @@ Thread, Midnight Cord, Temple Thread, Silver Cord:
 ## Using it
 
 - **Quick Settings** (the Wi-Fi/volume/battery menu): the **Dangle** toggle shows
-  or hides every charm. Its arrow opens the menu: presets (Festive, Minimal,
-  Spooky, Custom), rope style, *Shake them*, Breeze, *Grab without Super*,
+  or hides every charm. Its arrow opens the menu: presets (Festive, Temple,
+  Minimal, Spooky, Custom), rope style, *Shake them*, Breeze, *Grab without Super*,
   Add/Remove cord and *Open settings…*
 - **Grab and flick**: hold <kbd>Super</kbd>, press on a charm, pull and let go.
-  The modifier can be Alt or Ctrl+Alt instead (Settings → Appearance).
+  Ropes are elastic while you hold them: pull a charm down and the rope stretches
+  (up to 1.6×); let go and it springs back to its own length. The modifier can be
+  Alt or Ctrl+Alt instead (Settings → Appearance).
 - **Hover**: brushing the pointer past a charm nudges it.
 - **Breeze**: a gentle gust every 45–120 seconds; it pauses on battery unless
   *Breeze on battery* is on, and stops entirely when system animations are off.
 - **Settings**: Library (hang any charm on any cord, drag to reorder), Cords
   (position, length, charms, rope style), Appearance, Import (your own PNG, JPG
-  or SVG pictures) and About.
+  or SVG pictures) and About. Every number is a slider: drag right to increase,
+  left to decrease, and the charms follow live.
+- **Charms**: fourteen original drawings, including Lord Murugan's Vel and
+  Karuppasamy's Aruval (both on the Temple preset).
 
 Charms hide in the Activities overview, while a window is fullscreen on the
 primary monitor, and on the lock screen.

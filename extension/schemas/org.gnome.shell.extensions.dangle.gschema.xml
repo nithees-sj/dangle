@@ -12,6 +12,7 @@
     <key name="preset" type="s">
       <choices>
         <choice value="festive"/>
+        <choice value="temple"/>
         <choice value="minimal"/>
         <choice value="spooky"/>
         <choice value="custom"/>

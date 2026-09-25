@@ -277,3 +277,20 @@ test('reduced motion: resets hanging still and settles quickly', () => {
     rope.push(1);
     assert.ok(timeToSleep(rope) < 3);
 });
+
+test('beginDrag can take an explicit slot (the actor that was pressed)', () => {
+    const rope = hanging({charmCount: 3});
+    assert.equal(rope.beginDrag(0, 0, 1), 1);
+    assert.equal(rope.dragSlot, 1);
+    rope.endDrag();
+    assert.equal(rope.beginDrag(0, 0, 7), -1);
+    assert.equal(rope.isDragging, false);
+});
+
+test('cordEnd reports the segment it lies on', () => {
+    const rope = hanging();
+    const end = rope.cordEnd();
+    const j = end.segment;
+    assert.ok(j >= 1 && j <= rope.pointCount - 1);
+    assert.ok(rope.y[j - 1] <= end.y + 1e-9 && end.y <= rope.y[j] + 1e-9);
+});

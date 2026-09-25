@@ -1,0 +1,6 @@
+{
+  "uuid": "dangle-test@local",
+  "name": "Dangle test driver",
+  "description": "Development only: drives Dangle inside a headless GNOME Shell and reports results. Never shipped.",
+  "shell-version": ["50"]
+}

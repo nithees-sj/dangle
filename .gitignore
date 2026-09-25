@@ -3,6 +3,7 @@ reference-hangly/
 
 # Generated at install/pack time
 extension/core/
+extension/NOTICE.md
 extension/schemas/gschemas.compiled
 dist/
 

@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" width="256" height="256">
+  <title>Star</title>
+  <!-- hanging loop: the rope ties on here (knot ≈ 0.9 r above centre) -->
+  <circle cx="128" cy="16" r="9" fill="none" stroke="#c8a24a" stroke-width="5"/>
+  <rect x="124.5" y="23" width="7" height="14" rx="3" fill="#c8a24a"/>
+  <polygon points="128.0,36.0 153.9,106.4 228.8,109.2 169.8,155.6 190.3,227.8 128.0,186.0 65.7,227.8 86.2,155.6 27.2,109.2 102.1,106.4" fill="#f0a92e" stroke="#9c5f0e" stroke-width="6" stroke-linejoin="round"/>
+  <polygon points="128,142 128.0,36.0 153.9,106.4" fill="#ffe08a"/>
+  <polygon points="128,142 228.8,109.2 169.8,155.6" fill="#ffe08a"/>
+  <polygon points="128,142 190.3,227.8 128.0,186.0" fill="#ffe08a"/>
+  <polygon points="128,142 65.7,227.8 86.2,155.6" fill="#ffe08a"/>
+  <polygon points="128,142 27.2,109.2 102.1,106.4" fill="#ffe08a"/>
+  <polygon points="128.0,36.0 153.9,106.4 228.8,109.2 169.8,155.6 190.3,227.8 128.0,186.0 65.7,227.8 86.2,155.6 27.2,109.2 102.1,106.4" fill="none" stroke="#9c5f0e" stroke-width="6" stroke-linejoin="round"/>
+  <circle cx="128" cy="142" r="9" fill="#fff4cf"/>
+</svg>

@@ -254,10 +254,13 @@ export class Rope {
         return best;
     }
 
-    /** Picks up the charm under (x, y). @returns {number} slot index or -1 */
-    beginDrag(x, y) {
-        const slot = this.charmAt(x, y);
-        if (slot < 0)
+    /**
+     * Picks up a charm. With `slot` given (the actor the pointer pressed on),
+     * that charm is taken; otherwise whichever charm is under (x, y).
+     * @returns {number} slot index or -1
+     */
+    beginDrag(x, y, slot = this.charmAt(x, y)) {
+        if (!(slot >= 0 && slot < this.slots.length))
             return -1;
         this._drag = this.slots[slot].node;
         this._dragVX = this._dragVY = 0;
@@ -364,7 +367,11 @@ export class Rope {
         return out;
     }
 
-    /** Where the drawn cord ends: the knot on top of the bottom charm. */
+    /**
+     * Where the drawn cord ends: the knot on top of the bottom charm.
+     * `out.segment` is the node just below that point, so the cord is drawn
+     * through nodes 0 … segment-1 and then to (out.x, out.y).
+     */
     cordEnd(out = {}) {
         const slot = this.slots[this.slots.length - 1];
         return this._pointBack(slot.node, slot.radius * KNOT_INSET, out);
@@ -653,7 +660,7 @@ export class Rope {
         y[node] = y[leader] + dy * k;
     }
 
-    /** Point `distance` px back up the rope from `node` (toward the anchor). */
+    /** Point `distance` px back up the rope from `node` (toward the anchor); sets out.segment. */
     _pointBack(node, distance, out) {
         const x = this.x, y = this.y;
         let remaining = distance;
@@ -664,12 +671,14 @@ export class Rope {
                 const t = remaining / len;
                 out.x = x[j] + dx * t;
                 out.y = y[j] + dy * t;
+                out.segment = j;
                 return out;
             }
             remaining -= len;
         }
         out.x = x[0];
         out.y = y[0];
+        out.segment = 1;
         return out;
     }
 

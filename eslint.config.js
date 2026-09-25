@@ -195,11 +195,11 @@ export default [
         languageOptions: {globals: {...globals.es2024}},
     },
     {
-        files: ['extension/**/*.js'],
+        files: ['extension/**/*.js', 'tools/test-driver/**/*.js'],
         languageOptions: {globals: {...globals.es2024, ...gjsGlobals, ...shellGlobals}},
     },
     {
-        files: ['tests/**/*.js', 'eslint.config.js', 'tools/**/*.js'],
+        files: ['tests/**/*.js', 'eslint.config.js'],
         languageOptions: {globals: {...globals.es2024, ...globals.node}},
     },
 ];

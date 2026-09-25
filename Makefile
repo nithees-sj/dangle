@@ -8,7 +8,7 @@ DEST       := $(HOME)/.local/share/gnome-shell/extensions/$(UUID)
 DIST       := dist
 NESTED_RES ?= 1920x1080
 
-.PHONY: all test lint sync schemas install uninstall nested pack logs clean
+.PHONY: all test lint sync schemas install uninstall nested pack logs clean headless-test
 
 all: test lint
 
@@ -26,6 +26,7 @@ node_modules: package.json
 sync:
 	rm -rf $(SRC)/core
 	cp -r core $(SRC)/core
+	cp NOTICE.md $(SRC)/NOTICE.md
 
 schemas:
 	glib-compile-schemas --strict $(SRC)/schemas
@@ -63,5 +64,9 @@ pack: sync
 logs:
 	journalctl -f -o cat /usr/bin/gnome-shell
 
+# Run the extension in a throwaway headless GNOME Shell and check it for real
+headless-test: sync schemas
+	tools/headless-test.sh
+
 clean:
-	rm -rf $(SRC)/core $(SRC)/schemas/gschemas.compiled $(DIST)
+	rm -rf $(SRC)/core $(SRC)/NOTICE.md $(SRC)/schemas/gschemas.compiled $(DIST)

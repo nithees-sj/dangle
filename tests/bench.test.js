@@ -36,8 +36,9 @@ test(`5 cords × 3 charms average ≤ ${BUDGET_MS} ms of physics per 60 Hz frame
         // Keep everything awake: a constant gust, pushes, and a drag on cord 0.
         if (!breeze.active)
             breeze.start(1);
+        // Worst case: every cord shaken at once ("Shake them"), repeatedly.
         if (f % 45 === 0)
-            ropes[(f / 45) % 5].push(f % 90 ? 1 : -1);
+            ropes.forEach((rope, c) => rope.push((c + f / 45) % 2 ? 1 : -1));
         if (f % 120 === 10) {
             const s = ropes[0].slots[2];
             ropes[0].beginDrag(ropes[0].x[s.node], ropes[0].y[s.node]);

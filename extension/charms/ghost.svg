@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" width="256" height="256">
+  <title>Ghost</title>
+  <circle cx="128" cy="16" r="9" fill="none" stroke="#aab0c6" stroke-width="5"/>
+  <rect x="124.5" y="23" width="7" height="53" rx="3" fill="#aab0c6"/>
+  <path d="M58 206 L58 118 C58 62 198 62 198 118 L198 206 Q184 192 172 206 Q158 220 144 206 Q128 192 114 206 Q100 220 86 206 Q72 192 58 206 Z" fill="#f8f8fc" stroke="#aab0c6" stroke-width="5" stroke-linejoin="round"/>
+  <ellipse cx="104" cy="128" rx="11" ry="16" fill="#2b2f45"/>
+  <ellipse cx="152" cy="128" rx="11" ry="16" fill="#2b2f45"/>
+  <circle cx="107" cy="122" r="4" fill="#ffffff"/>
+  <circle cx="155" cy="122" r="4" fill="#ffffff"/>
+  <ellipse cx="88" cy="156" rx="10" ry="6" fill="#f7b2c4" opacity="0.8"/>
+  <ellipse cx="168" cy="156" rx="10" ry="6" fill="#f7b2c4" opacity="0.8"/>
+  <path d="M118 158 Q128 168 138 158" fill="none" stroke="#2b2f45" stroke-width="4" stroke-linecap="round"/>
+</svg>

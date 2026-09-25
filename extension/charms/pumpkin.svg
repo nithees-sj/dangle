@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" width="256" height="256">
+  <title>Pumpkin</title>
+  <circle cx="128" cy="16" r="9" fill="none" stroke="#c8a24a" stroke-width="5"/>
+  <rect x="124.5" y="23" width="7" height="17" rx="3" fill="#c8a24a"/>
+  <path d="M128 60 C124 48 126 40 136 34" fill="none" stroke="#5e7d22" stroke-width="10" stroke-linecap="round"/>
+  <path d="M136 46 Q162 30 176 50 Q156 62 136 46 Z" fill="#79a33a" stroke="#4d6b1c" stroke-width="3"/>
+  <ellipse cx="92" cy="146" rx="52" ry="76" fill="#e0701a" stroke="#8f3f06" stroke-width="5"/>
+  <ellipse cx="164" cy="146" rx="52" ry="76" fill="#e0701a" stroke="#8f3f06" stroke-width="5"/>
+  <ellipse cx="128" cy="146" rx="50" ry="82" fill="#f68d27" stroke="#8f3f06" stroke-width="5"/>
+  <path d="M98 128 L112 108 L126 128 Z M130 128 L144 108 L158 128 Z" fill="#5a2a08"/>
+  <path d="M92 158 Q128 196 164 158 L152 164 L146 156 L138 166 L128 158 L118 166 L110 156 L104 164 Z" fill="#5a2a08"/>
+  <path d="M112 84 Q104 120 108 170" fill="none" stroke="#ffc07a" stroke-width="6" stroke-linecap="round" opacity="0.6"/>
+</svg>

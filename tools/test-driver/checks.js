@@ -610,12 +610,38 @@ async function prefs(ctx) {
     await waitFor(() => !overlay._timeline.is_playing(), 10000);
 }
 
+// ── phase 9: presets with the full charm set ───────────────────────────────
+
+async function presets(ctx) {
+    const overlay = ctx.overlay();
+    const counts = {festive: 5, minimal: 2, spooky: 4};
+    const settingsModel = await import(ctx.dangle().dir.get_child('settingsModel.js').get_uri());
+    for (const [id, count] of Object.entries(counts)) {
+        settingsModel.applyPreset(ctx.settings, id);
+        // eslint-disable-next-line no-await-in-loop
+        await sleep(100);
+        ctx.check(`${id}: ${count} cords`, overlay._cords.length === count, `${overlay._cords.length}`);
+        const files = overlay._cords.flatMap(c => c.charmActors.map(a => a.gicon.get_file()));
+        ctx.check(`${id}: every charm has artwork`, files.every(f => f.query_exists(null)),
+                  files.filter(f => !f.query_exists(null)).map(f => f.get_basename()).join());
+        // eslint-disable-next-line no-await-in-loop
+        await waitFor(() => !overlay._timeline.is_playing(), 10000);
+        // eslint-disable-next-line no-await-in-loop
+        await ctx.screenshot(`preset-${id}`, 0, 0, 1920, 330);
+    }
+    for (const key of ['preset', 'cords'])
+        ctx.settings.reset(key);
+    await sleep(100);
+    await waitFor(() => !overlay._timeline.is_playing(), 10000);
+}
+
 export const ALL_CHECKS = [
     ['structure', structure],
     ['sleep', sleeping],
     ['settings', settingsLive],
     ['visibility', visibility],
     ['styles', styles],
+    ['presets', presets],
     ['quick-settings', quickSettings],
     ['prefs', prefs],
     ['pointer', pointer],

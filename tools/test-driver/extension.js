@@ -40,6 +40,7 @@ export default class DangleTestDriver extends Extension {
         const ctx = {
             uuid: UUID,
             out: this._out,
+            driverDir: this.dir,
             check: (name, ok, detail = '') => this._record(ok ? 'PASS' : 'FAIL', name, detail),
             info: (name, detail) => this._record('INFO', name, detail),
             dangle: () => Main.extensionManager.lookup(UUID),

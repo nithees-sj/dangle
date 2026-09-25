@@ -545,6 +545,62 @@ async function quickSettings(ctx) {
     await waitFor(() => !overlay._timeline.is_playing(), 10000);
 }
 
+// ── phase 7: preferences ───────────────────────────────────────────────────
+
+async function prefs(ctx) {
+    const overlay = ctx.overlay();
+    const launcher = new Gio.SubprocessLauncher({
+        flags: Gio.SubprocessFlags.STDOUT_PIPE | Gio.SubprocessFlags.STDERR_MERGE,
+    });
+    // Shew (used by the Extensions app modules) lives with the shell's typelibs.
+    launcher.setenv('GI_TYPELIB_PATH', '/usr/lib/gnome-shell/girepository-1.0', true);
+    launcher.setenv('LD_LIBRARY_PATH', '/usr/lib/gnome-shell', true);
+    const harness = ctx.driverDir.get_child('prefs-harness.js').get_path();
+    const proc = launcher.spawnv(['gjs', '-m', harness, ctx.dangle().dir.get_path(), ctx.out]);
+    const watchdog = GLib.timeout_add_seconds(GLib.PRIORITY_DEFAULT, 90, () => {
+        proc.force_exit();
+        return GLib.SOURCE_REMOVE;
+    });
+    const output = await new Promise((resolve, reject) => {
+        proc.communicate_utf8_async(null, null, (p, result) => {
+            try {
+                resolve(p.communicate_utf8_finish(result)[1] ?? '');
+            } catch (e) {
+                reject(e);
+            }
+        });
+    });
+    GLib.Source.remove(watchdog);
+    ctx.check('preferences harness exited cleanly', proc.get_successful(),
+              proc.get_successful() ? '' : output.split('\n').filter(l => l.includes('harness')).slice(-3).join(' | '));
+    // (The isolated session has no accessibility bus; GTK's complaint about it is not ours.)
+    const errors = output.split('\n').filter(l => /JS ERROR|CRITICAL|TypeError|ReferenceError/.test(l) && !/atspi/.test(l));
+    ctx.check('no JS errors from the preferences window', errors.length === 0, errors.slice(0, 5).join(' | '));
+    try {
+        const [, bytes] = GLib.file_get_contents(GLib.build_filenamev([ctx.out, 'prefs-results.txt']));
+        for (const line of new TextDecoder().decode(bytes).trim().split('\n')) {
+            const [, kind, rest] = line.match(/^(\w+) (.*)$/) ?? [];
+            if (kind === 'PASS' || kind === 'FAIL')
+                ctx.check(`prefs: ${rest}`, kind === 'PASS');
+        }
+    } catch (e) {
+        ctx.check('prefs harness wrote results', false, `${e.message}\n${output.slice(-2000)}`);
+    }
+
+    // The running overlay must have picked every change up live.
+    await sleep(200);
+    const cords = overlay._cords;
+    ctx.check('overlay: cord length from prefs', Math.abs(cords[0].rope.length - 200) < 1e-6, `${cords[0].rope.length}`);
+    ctx.check('overlay: style from prefs', cords[0].rope.style === 'gold-chain');
+    ctx.check('overlay: charm from the library', cords[1].charmIds[0] === 'builtin:lotus', cords[1].charmIds.join());
+    ctx.check('overlay: charm size from prefs', cords[1].charmActors[0].icon_size === 50, `${cords[1].charmActors[0].icon_size}`);
+    ctx.check('overlay: shadow off from prefs', !cords[0]._shadow.visible);
+    for (const key of ['cords', 'custom-cords', 'preset', 'active-cord', 'charm-size', 'shadow', 'grab-modifier'])
+        ctx.settings.reset(key);
+    await sleep(100);
+    await waitFor(() => !overlay._timeline.is_playing(), 10000);
+}
+
 export const ALL_CHECKS = [
     ['structure', structure],
     ['sleep', sleeping],
@@ -552,6 +608,7 @@ export const ALL_CHECKS = [
     ['visibility', visibility],
     ['styles', styles],
     ['quick-settings', quickSettings],
+    ['prefs', prefs],
     ['pointer', pointer],
     ['grab', grab],
     ['breeze', breeze],

@@ -207,7 +207,9 @@ export class Cord {
 
         this._body.setStyle(bodyCss(appearance), width, rest, this._scale);
 
-        this._glowOn = appearance.glow > 0;
+        // Only a strong glow earns its own layer of moving links (Neon); a faint
+        // one (Spider Thread's 0.26) is invisible at this width anyway.
+        this._glowOn = appearance.glow >= 0.5;
         this._glow.setStyle(() => `background-color: ${rgba(appearance.palette.base, 0.3 * appearance.glow)};`,
                             width * 3, rest, this._scale);
         this._glow.setVisible(this._glowOn);

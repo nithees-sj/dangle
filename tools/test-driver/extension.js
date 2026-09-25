@@ -48,9 +48,12 @@ export default class DangleTestDriver extends Extension {
             screenshot: (name, x, y, w, h) => this._screenshot(name, x, y, w, h),
         };
         try {
-            // The shell starts in the overview; the charms only show outside it.
+            // The shell starts in the overview (startup animation); the charms only
+            // show outside it. hide() is ignored until that animation finishes.
+            await waitFor(() => Main.overview._shownState !== 'SHOWING', 20000);
             Main.overview.hide();
-            await waitFor(() => !Main.overview.visible, 5000);
+            const closed = await waitFor(() => !Main.overview.visible, 5000);
+            ctx.check('startup overview closed before testing', closed >= 0, `state ${Main.overview._shownState}`);
             const ext = ctx.dangle();
             ctx.check('dangle loaded and active', ext?.state === 1, `state=${ext?.state} error=${ext?.error}`);
             ctx.settings = ext.stateObj.getSettings();

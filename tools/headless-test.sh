@@ -27,6 +27,8 @@ cp -r "$ROOT/tools/test-driver" "$EXT_DIR/dangle-test@local"
 timeout "${DANGLE_TEST_TIMEOUT:-300}" dbus-run-session -- bash -c '
     gsettings set org.gnome.shell enabled-extensions "[\"dangle-test@local\", \"dangle@nithees\"]"
     gsettings set org.gnome.shell welcome-dialog-last-shown-version "999"
+    # A virtual pointer starts at (0, 0): the hot corner would open the overview.
+    gsettings set org.gnome.desktop.interface enable-hot-corners false
     exec gnome-shell --headless --wayland --no-x11 \
         --virtual-monitor 1920x1080 --wayland-display "dangle-test-$$"
 ' >"$OUT/shell.log" 2>&1 || true

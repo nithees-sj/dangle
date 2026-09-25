@@ -1,6 +1,9 @@
 // Checks run inside the headless shell. Each group receives the driver's ctx.
 
+import Clutter from 'gi://Clutter';
+import Gio from 'gi://Gio';
 import GLib from 'gi://GLib';
+import St from 'gi://St';
 
 import * as Main from 'resource:///org/gnome/shell/ui/main.js';
 
@@ -158,15 +161,16 @@ async function perf(ctx) {
     // Real overlay: shake the default cords and read the debug timers.
     const overlay = ctx.overlay();
     const s = overlay._stats;
-    s.frames = s.physicsUs = s.syncUs = s.repaintUs = s.repaints = 0;
+    s.frames = s.physicsUs = s.syncUs = 0;
     overlay.shake();
     await sleep(1000);
     const frames = Math.max(1, s.frames);
-    const phys = s.physicsUs / frames / 1000, sync = s.syncUs / frames / 1000, paint = s.repaintUs / frames / 1000;
+    const phys = s.physicsUs / frames / 1000, sync = s.syncUs / frames / 1000;
     ctx.info('overlay per frame (2 cords, shaking)',
-             `physics ${phys.toFixed(3)} ms, actor sync ${sync.toFixed(3)} ms, repaint ${paint.toFixed(3)} ms over ${s.frames} frames`);
-    ctx.check('overlay physics + repaint < 2 ms/frame', phys + sync + paint < 2, `${(phys + sync + paint).toFixed(3)} ms`);
-    ctx.check('repaint ≤ 1 ms/frame', paint <= 1, `${paint.toFixed(3)} ms`);
+             `physics ${phys.toFixed(3)} ms, actor updates ${sync.toFixed(3)} ms over ${s.frames} frames`);
+    ctx.check('overlay physics + actor updates < 2 ms/frame', phys + sync < 2, `${(phys + sync).toFixed(3)} ms`);
+    const drawingAreas = overlay.actor.get_children().flatMap(c => c.get_children()).filter(a => a instanceof St.DrawingArea);
+    ctx.check('no CPU repaint: no St.DrawingArea in the overlay', drawingAreas.length === 0);
     await waitFor(() => !overlay._timeline.is_playing(), 10000);
 
     // Worst case: five cords with three charms each, all moving.
@@ -174,7 +178,7 @@ async function perf(ctx) {
     ctx.settings.set_value('cords', new GLib.Variant(CORDS, styles.map((style, i) =>
         [0.1 + i * 0.2, 150 + i * 20, style, ['builtin:star', 'builtin:crescent', 'builtin:star']])));
     await waitFor(() => !overlay._timeline.is_playing(), 10000);
-    s.frames = s.physicsUs = s.syncUs = s.repaintUs = s.repaints = 0;
+    s.frames = s.physicsUs = s.syncUs = 0;
     overlay.shake();
     await sleep(1500);
     const n = Math.max(1, s.frames);
@@ -207,11 +211,233 @@ async function perf(ctx) {
     await waitFor(() => !overlay._timeline.is_playing(), 10000);
 }
 
+// ── phase 4: pointer, grab and flick, breeze ───────────────────────────────
+
+// Virtual pointers take Clutter button numbers, not evdev codes.
+const BTN_LEFT = Clutter.BUTTON_PRIMARY;
+
+let virtualDevices = null;
+
+function devices() {
+    if (!virtualDevices) {
+        const seat = Clutter.get_default_backend().get_default_seat();
+        virtualDevices = {
+            pointer: seat.create_virtual_device(Clutter.InputDeviceType.POINTER_DEVICE),
+            keyboard: seat.create_virtual_device(Clutter.InputDeviceType.KEYBOARD_DEVICE),
+        };
+    }
+    return virtualDevices;
+}
+
+const now = () => GLib.get_monotonic_time();
+
+async function moveTo(pointer, x, y) {
+    pointer.notify_absolute_motion(now(), x, y);
+    await sleep(20);
+}
+
+function bottomCharm(overlay, index = 0) {
+    const cord = overlay._cords[index];
+    const pose = cord.rope.charmPose(cord.rope.slots.length - 1);
+    return {cord, x: pose.x, y: pose.y, actor: cord.charmActors.at(-1)};
+}
+
+async function pointer(ctx) {
+    const overlay = ctx.overlay();
+    const {pointer: dev} = devices();
+    await waitFor(() => !overlay._timeline.is_playing(), 10000);
+
+    await moveTo(dev, 300, 900);
+    await sleep(600);
+    ctx.check('pointer far away: poll every 250 ms', overlay._pollInterval === 250, `${overlay._pollInterval}`);
+
+    const charm = bottomCharm(overlay);
+    await moveTo(dev, charm.x + 45, charm.y);
+    await sleep(600);
+    ctx.check('pointer near the cords: poll every 50 ms', overlay._pollInterval === 50, `${overlay._pollInterval}`);
+    ctx.check('near but no modifier: charms still let clicks through', !charm.actor.reactive);
+
+    // Brush quickly across the charm (the poll is already at 50 ms here).
+    for (let dx = 45; dx >= -45; dx -= 6)
+        // eslint-disable-next-line no-await-in-loop
+        await moveTo(dev, charm.x + dx, charm.y);
+    await sleep(120);
+    ctx.check('a passing pointer nudges the charm', !charm.cord.rope.isSleeping || overlay._timeline.is_playing());
+    const ms = await waitFor(() => !overlay._timeline.is_playing(), 10000);
+    ctx.check('settles again after a nudge', ms >= 0);
+
+    // A plain click on a charm must reach whatever is underneath.
+    const c2 = bottomCharm(overlay);
+    await moveTo(dev, c2.x, c2.y);
+    await sleep(120);
+    dev.notify_button(now(), BTN_LEFT, Clutter.ButtonState.PRESSED);
+    await sleep(60);
+    const grabbedWithoutModifier = overlay._input.dragging;
+    dev.notify_button(now(), BTN_LEFT, Clutter.ButtonState.RELEASED);
+    await sleep(60);
+    ctx.check('click without Super passes through (no grab)', !grabbedWithoutModifier);
+    await moveTo(dev, 300, 900);
+}
+
+async function grab(ctx) {
+    const overlay = ctx.overlay();
+    const {pointer: dev, keyboard} = devices();
+    await waitFor(() => !overlay._timeline.is_playing(), 10000);
+    let overlayKey = 0;
+    const id = global.display.connect('overlay-key', () => overlayKey++);
+
+    // Approach, let any hover nudge die down, then press Super right on the charm.
+    await moveTo(dev, bottomCharm(overlay).x, bottomCharm(overlay).y);
+    await sleep(300);
+    await waitFor(() => !overlay._timeline.is_playing(), 10000);
+    const charm = bottomCharm(overlay);
+    await moveTo(dev, charm.x, charm.y);
+    keyboard.notify_keyval(now(), Clutter.KEY_Super_L, Clutter.KeyState.PRESSED);
+    const armed = await waitFor(() => charm.actor.reactive, 1000);
+    ctx.check('holding Super near a charm makes it grabbable', armed >= 0, armed >= 0 ? `${Math.round(armed)} ms` : 'never armed');
+
+    dev.notify_button(now(), BTN_LEFT, Clutter.ButtonState.PRESSED);
+    await sleep(60);
+    ctx.check('Super+click grabs the charm', overlay._input.dragging && charm.cord.rope.isDragging,
+              `input.dragging=${overlay._input.dragging} rope.isDragging=${charm.cord.rope?.isDragging}`);
+    ctx.check('the drag holds a stage grab', overlay._input._grab !== null);
+    for (let i = 1; i <= 8; i++)
+        // eslint-disable-next-line no-await-in-loop
+        await moveTo(dev, charm.x + i * 14, charm.y + i * 3);
+    await sleep(40);
+    const heldX = charm.cord.rope.x[charm.cord.rope.slots.at(-1).node];
+    ctx.check('the charm follows the pointer', heldX > charm.x + 60, `moved ${Math.round(heldX - charm.x)} px`);
+    // Flick: release while still moving.
+    await moveTo(dev, charm.x + 130, charm.y + 26);
+    dev.notify_button(now(), BTN_LEFT, Clutter.ButtonState.RELEASED);
+    await sleep(30);
+    keyboard.notify_keyval(now(), Clutter.KEY_Super_L, Clutter.KeyState.RELEASED);
+    await sleep(700);
+
+    ctx.check('release ends the drag and dismisses the grab', !overlay._input.dragging && overlay._input._grab === null);
+    ctx.check('Super+click does NOT trigger the overlay key', overlayKey === 0, `${overlayKey} overlay-key signals`);
+    ctx.check('Super+click does NOT open the overview', !Main.overview.visible);
+    ctx.check('the flicked charm swings on', overlay._timeline.is_playing());
+    await moveTo(dev, 300, 900);
+    await sleep(400);
+    ctx.check('charms disarmed after Super is released', !charm.actor.reactive);
+    ctx.check('no stage event handler while disarmed', overlay._input._capturedId === 0);
+    global.display.disconnect(id);
+    if (Main.overview.visible) {
+        Main.overview.hide();
+        await waitFor(() => !Main.overview.visible, 3000);
+    }
+    await waitFor(() => !overlay._timeline.is_playing(), 10000);
+
+    // "Grab without Super"
+    ctx.settings.set_boolean('grab-without-super', true);
+    const c2 = bottomCharm(overlay);
+    await moveTo(dev, c2.x, c2.y);
+    const armed2 = await waitFor(() => c2.actor.reactive, 1000);
+    ctx.check('grab-without-super arms charms with no modifier', armed2 >= 0);
+
+    // Hiding mid-drag must release everything.
+    dev.notify_button(now(), BTN_LEFT, Clutter.ButtonState.PRESSED);
+    await sleep(60);
+    const dragging = overlay._input.dragging;
+    ctx.settings.set_boolean('enabled', false);
+    await sleep(60);
+    ctx.check('hiding mid-drag ends the drag and the grab', dragging && !overlay._input.dragging && overlay._input._grab === null);
+    dev.notify_button(now(), BTN_LEFT, Clutter.ButtonState.RELEASED);
+    ctx.settings.set_boolean('enabled', true);
+    ctx.settings.set_boolean('grab-without-super', false);
+    await moveTo(dev, 300, 900);
+    await sleep(400);
+    ctx.check('grab-without-super off: charms let clicks through again', !c2.actor.reactive);
+
+    // Alt as the modifier. (Releasing Super alone would open the overview, so
+    // Super stays held until Alt has been pressed too.)
+    ctx.settings.set_string('grab-modifier', 'alt');
+    await moveTo(dev, c2.x, c2.y);
+    keyboard.notify_keyval(now(), Clutter.KEY_Super_L, Clutter.KeyState.PRESSED);
+    await sleep(200);
+    const superArms = c2.actor.reactive;
+    keyboard.notify_keyval(now(), Clutter.KEY_Alt_L, Clutter.KeyState.PRESSED);
+    const altArms = await waitFor(() => c2.actor.reactive, 1000);
+    keyboard.notify_keyval(now(), Clutter.KEY_Alt_L, Clutter.KeyState.RELEASED);
+    keyboard.notify_keyval(now(), Clutter.KEY_Super_L, Clutter.KeyState.RELEASED);
+    ctx.check('grab-modifier=alt: Alt arms, Super does not', !superArms && altArms >= 0,
+              `super ${superArms}, alt ${altArms}`);
+    ctx.settings.reset('grab-modifier');
+    if (Main.overview.visible) {
+        Main.overview.hide();
+        await waitFor(() => !Main.overview.visible, 3000);
+    }
+    await moveTo(dev, 300, 900);
+    await waitFor(() => !overlay._timeline.is_playing(), 10000);
+}
+
+async function breeze(ctx) {
+    const overlay = ctx.overlay();
+    // This machine may really be on battery; start from mains power.
+    const realBattery = overlay._battery.onBattery;
+    overlay._battery.onBattery = false;
+    overlay._syncBreeze();
+    await waitFor(() => !overlay._timeline.is_playing(), 10000);
+    ctx.check('a gust is scheduled while the breeze is on', overlay._gustId !== 0);
+    overlay.gust();
+    await sleep(700);
+    const moving = overlay._cords.some(c => !c.rope.isSleeping);
+    ctx.check('a gust sways the charms', moving && overlay._timeline.is_playing());
+    const ms = await waitFor(() => !overlay._timeline.is_playing(), 12000);
+    ctx.check('everything sleeps after the gust', ms >= 0, ms >= 0 ? `${Math.round(ms)} ms after` : 'still playing');
+    await ctx.screenshot('after-gust', 0, 0, 1920, 360);
+
+    overlay._battery.onBattery = true;
+    overlay._syncBreeze();
+    ctx.check('on battery: no gusts scheduled', overlay._gustId === 0);
+    ctx.settings.set_boolean('breeze-on-battery', true);
+    await sleep(50);
+    ctx.check('breeze-on-battery overrides', overlay._gustId !== 0);
+    ctx.settings.reset('breeze-on-battery');
+    await sleep(50);
+    overlay._battery.onBattery = false;
+    overlay._syncBreeze();
+    ctx.settings.set_boolean('breeze-enabled', false);
+    await sleep(50);
+    ctx.check('breeze switch off: no gusts', overlay._gustId === 0);
+    ctx.settings.reset('breeze-enabled');
+    await sleep(50);
+    ctx.check('breeze switch on again', overlay._gustId !== 0);
+    overlay._battery.onBattery = realBattery;
+    overlay._syncBreeze();
+}
+
+async function reducedMotion(ctx) {
+    const overlay = ctx.overlay();
+    const realBattery = overlay._battery.onBattery;
+    overlay._battery.onBattery = false;
+    overlay._syncBreeze();
+    const iface = new Gio.Settings({schema_id: 'org.gnome.desktop.interface'});
+    iface.set_boolean('enable-animations', false);
+    await waitFor(() => !St.Settings.get().enable_animations, 2000);
+    await sleep(100);
+    ctx.check('reduced motion reaches the ropes', overlay._cords.every(c => c.rope.reducedMotion));
+    ctx.check('reduced motion: no breeze', overlay._gustId === 0);
+    ctx.settings.set_boolean('respect-reduced-motion', false);
+    await sleep(50);
+    ctx.check('respect-reduced-motion off restores motion', overlay._cords.every(c => !c.rope.reducedMotion) && overlay._gustId !== 0);
+    ctx.settings.reset('respect-reduced-motion');
+    iface.reset('enable-animations');
+    await waitFor(() => St.Settings.get().enable_animations, 2000);
+    overlay._battery.onBattery = realBattery;
+    overlay._syncBreeze();
+}
+
 export const ALL_CHECKS = [
     ['structure', structure],
     ['sleep', sleeping],
     ['settings', settingsLive],
     ['visibility', visibility],
+    ['pointer', pointer],
+    ['grab', grab],
+    ['breeze', breeze],
+    ['reduced-motion', reducedMotion],
     ['perf', perf],
     ['cycle', cycle],
 ];

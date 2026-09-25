@@ -3,7 +3,7 @@
 
 import GLib from 'gi://GLib';
 
-import {normalizeCords, cordsEqual} from './core/cords.js';
+import {normalizeCords, cordsEqual, replaceCharm} from './core/cords.js';
 import {presetCords} from './core/presets.js';
 
 const CORDS_TYPE = 'a(ddsas)';
@@ -39,4 +39,10 @@ export function applyPreset(settings, id) {
     const cords = presetCords(id) ?? readCords(settings, 'custom-cords');
     settings.set_string('preset', id);
     writeKey(settings, 'cords', cords);
+}
+
+/** Swaps a (deleted) charm for the default in both the live and the custom layout. */
+export function replaceCharmEverywhere(settings, id) {
+    for (const key of ['cords', 'custom-cords'])
+        writeKey(settings, key, replaceCharm(readCords(settings, key), id));
 }

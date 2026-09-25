@@ -6,6 +6,7 @@
 //   gjs -m prefs-harness.js <extension dir> <out dir>
 
 import Adw from 'gi://Adw?version=1';
+import GdkPixbuf from 'gi://GdkPixbuf';
 import Gio from 'gi://Gio';
 import GLib from 'gi://GLib';
 import Gtk from 'gi://Gtk?version=4.0';
@@ -53,7 +54,7 @@ function snapshot(window, name) {
 async function run(window) {
     const settings = window._dangleModel.settings;
     check('preferences window filled', !!window.visible_page);
-    const pages = ['library', 'cords', 'appearance', 'about'];
+    const pages = ['library', 'cords', 'appearance', 'import', 'about'];
     for (const name of pages) {
         window.visible_page_name = name;
         // eslint-disable-next-line no-await-in-loop
@@ -121,6 +122,67 @@ async function run(window) {
     await wait(100);
     check('outside changes show up live', Math.round(findAll(appearance, w => w instanceof Adw.SpinRow && w.title === 'Charm size')[0].value) === 50);
     snapshot(window, 'appearance-after');
+
+    // ── Import ────────────────────────────────────────────────────────────
+    window.visible_page_name = 'import';
+    await wait(200);
+    const importPage = window.visible_page;
+    const samples = makeSamples();
+    const ids = samples.map(path => importPage._dangleImport(Gio.File.new_for_path(path)));
+    check('PNG, JPG and SVG imported', ids.every(Boolean), ids.join(', '));
+    const dataDir = GLib.build_filenamev([GLib.get_user_data_dir(), 'dangle', 'charms']);
+    for (const id of ids.filter(Boolean)) {
+        const pixbuf = GdkPixbuf.Pixbuf.new_from_file(GLib.build_filenamev([dataDir, id.slice('custom:'.length)]));
+        check(`${id} is a 256×256 PNG with alpha`, pixbuf.get_width() === 256 && pixbuf.get_height() === 256 && pixbuf.get_has_alpha());
+    }
+    check('names are sanitized', ids[2]?.startsWith('custom:my-star-'), ids[2]);
+    await wait(300);
+    const rows = findAll(importPage, w => w._dangleCharm?.startsWith('custom:'));
+    check('imported charms listed on the Import page', rows.length === 3, `${rows.length}`);
+    snapshot(window, 'import-after');
+
+    window.visible_page_name = 'library';
+    await wait(200);
+    const lib = window.visible_page;
+    const customTiles = findAll(lib._dangle.flow, w => w._dangleCharm?.startsWith('custom:'));
+    check('imported charms appear in the Library', customTiles.length === 3, `${customTiles.length}`);
+    lib._dangle.cordRow.selected = 0;
+    await wait(100);
+    lib._dangle.select(0);
+    customTiles.find(w => w._dangleCharm === ids[0]).emit('clicked');
+    await wait(150);
+    check('an imported charm hangs on a cord', settings.get_value('cords').deepUnpack()[0][3][0] === ids[0]);
+    snapshot(window, 'library-after');
+
+    // Deleting a charm in use falls back to the default charm.
+    lib._dangle.select(0);
+    customTiles.find(w => w._dangleCharm === ids[1]).emit('clicked');
+    await wait(150);
+    importPage._dangleDelete(ids[1]);
+    await wait(300);
+    check('deleted charm file removed', !GLib.file_test(GLib.build_filenamev([dataDir, ids[1].slice(7)]), GLib.FileTest.EXISTS));
+    check('cords using a deleted charm fall back to the default',
+          settings.get_value('cords').deepUnpack()[0][3][0] === 'builtin:star');
+    check('deleted charm leaves the Import list', findAll(window.visible_page.get_root(), w => w._dangleCharm === ids[1]).length === 0);
+    lib._dangle.select(0);
+    findAll(lib._dangle.flow, w => w._dangleCharm === ids[0])[0].emit('clicked');
+    await wait(150);
+    record('INFO', 'imported', ids[0]);
+}
+
+function makeSamples() {
+    const wide = GdkPixbuf.Pixbuf.new(GdkPixbuf.Colorspace.RGB, true, 8, 400, 160);
+    wide.fill(0xe0457bff);
+    const widePath = GLib.build_filenamev([outDir, 'wide banner.png']);
+    wide.savev(widePath, 'png', [], []);
+    const photo = GdkPixbuf.Pixbuf.new(GdkPixbuf.Colorspace.RGB, false, 8, 300, 300);
+    photo.fill(0x3a86ffff);
+    const photoPath = GLib.build_filenamev([outDir, 'Photo.JPG']);
+    photo.savev(photoPath, 'jpeg', ['quality'], ['90']);
+    const svgPath = GLib.build_filenamev([outDir, 'My Star.svg']);
+    Gio.File.new_for_path(GLib.build_filenamev([extensionPath, 'charms', 'star.svg']))
+        .copy(Gio.File.new_for_path(svgPath), Gio.FileCopyFlags.OVERWRITE, null, null);
+    return [widePath, photoPath, svgPath];
 }
 
 // Never hang the test run.

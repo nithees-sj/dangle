@@ -11,10 +11,13 @@ import {sleep, waitFor} from './util.js';
 
 const CORDS = 'a(ddsas)';
 
+/** Counts actors below `actor`, skipping client windows (other processes come and go). */
 function countActors(actor) {
     let n = 1;
-    for (const child of actor.get_children())
-        n += countActors(child);
+    for (const child of actor.get_children()) {
+        if (child !== global.window_group)
+            n += countActors(child);
+    }
     return n;
 }
 
@@ -590,6 +593,12 @@ async function prefs(ctx) {
     // The running overlay must have picked every change up live.
     await sleep(200);
     const cords = overlay._cords;
+    const imported = cords[0].charmIds[0];
+    ctx.check('overlay: shows an imported charm', imported.startsWith('custom:'), imported);
+    const iconFile = cords[0].charmActors[0].gicon?.get_file?.();
+    ctx.check('overlay: imported charm loads from the user data dir', !!iconFile?.query_exists(null) &&
+        iconFile.get_path().startsWith(GLib.get_user_data_dir()), iconFile?.get_path());
+    await ctx.screenshot('imported-charm', 0, 0, 1920, 360);
     ctx.check('overlay: cord length from prefs', Math.abs(cords[0].rope.length - 200) < 1e-6, `${cords[0].rope.length}`);
     ctx.check('overlay: style from prefs', cords[0].rope.style === 'gold-chain');
     ctx.check('overlay: charm from the library', cords[1].charmIds[0] === 'builtin:lotus', cords[1].charmIds.join());

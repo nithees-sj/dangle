@@ -1,6 +1,7 @@
 // Small widget helpers shared by the preferences pages.
 
 import Gdk from 'gi://Gdk';
+import Gio from 'gi://Gio';
 import Gtk from 'gi://Gtk';
 
 const CSS = `
@@ -24,13 +25,10 @@ export function installCss() {
     cssInstalled = true;
 }
 
-/** A square, aspect-preserving preview of a charm file. */
+/** A fixed-size, aspect-preserving preview of a charm file. */
 export function charmPicture(file, size) {
-    const picture = Gtk.Picture.new_for_file(file);
-    picture.set_content_fit(Gtk.ContentFit.CONTAIN);
-    picture.set_can_shrink(true);
-    picture.set_size_request(size, size);
-    return picture;
+    // Gtk.Image has a real fixed size; Gtk.Picture treats size requests as minimums.
+    return new Gtk.Image({gicon: new Gio.FileIcon({file}), pixel_size: size});
 }
 
 /** A labelled charm tile: picture above a caption. */

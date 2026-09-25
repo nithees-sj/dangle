@@ -8,6 +8,7 @@ import {installCss} from './prefs/widgets.js';
 import {libraryPage} from './prefs/library.js';
 import {cordsPage} from './prefs/cords.js';
 import {appearancePage} from './prefs/appearance.js';
+import {importPage} from './prefs/importPage.js';
 import {aboutPage} from './prefs/about.js';
 
 export default class DanglePreferences extends ExtensionPreferences {
@@ -21,6 +22,7 @@ export default class DanglePreferences extends ExtensionPreferences {
         window.add(libraryPage(model));
         window.add(cordsPage(model));
         window.add(appearancePage(model));
+        window.add(importPage(model));
         window.add(aboutPage(this));
 
         // Keep the settings alive with the window, and let go of them after.

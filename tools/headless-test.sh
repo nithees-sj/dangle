@@ -30,7 +30,8 @@ timeout "${DANGLE_TEST_TIMEOUT:-300}" dbus-run-session -- bash -c '
     # A virtual pointer starts at (0, 0): the hot corner would open the overview.
     gsettings set org.gnome.desktop.interface enable-hot-corners false
     exec gnome-shell --headless --wayland --no-x11 \
-        --virtual-monitor 1920x1080 --wayland-display "dangle-test-$$"
+        --virtual-monitor 1920x1080 --virtual-monitor 1280x1024 \
+        --wayland-display "dangle-test-$$"
 ' >"$OUT/shell.log" 2>&1 || true
 
 echo "Work dir: $WORK"

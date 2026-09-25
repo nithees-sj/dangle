@@ -56,8 +56,14 @@ export class CharmInput {
         if (armed === this._armed)
             return;
         this._armed = armed;
-        for (const actor of this._actors)
+        for (const actor of this._actors) {
             actor.reactive = armed || actor === this._drag?.actor;
+            // A relayout makes Clutter re-pick what is under the pointer after the
+            // next frame; otherwise a press over a window would still be routed
+            // (by mutter, before we see it) to the window the pointer last hit.
+            actor.queue_relayout();
+        }
+        global.stage.schedule_update();
         this._syncCapture();
     }
 

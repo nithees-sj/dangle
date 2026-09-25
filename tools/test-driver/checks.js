@@ -118,11 +118,15 @@ async function cycle(ctx) {
     const indicators = Main.panel.statusArea.quickSettings._indicators;
     const indicatorsBefore = indicators.get_n_children();
     let leftovers = 0, errors = 0;
+    let orphanSources = 0;
     for (let i = 0; i < 20; i++) {
+        const o = ctx.overlay();
+        const sources = [o?._pollId, o?._gustId].filter(Boolean);
         Main.extensionManager.disableExtension(ctx.uuid);
         // eslint-disable-next-line no-await-in-loop
         await waitFor(() => ctx.dangle().state !== 1, 3000);
         leftovers += overlaysInUiGroup().length;
+        orphanSources += sources.filter(id => GLib.MainContext.default().find_source_by_id(id)).length;
         Main.extensionManager.enableExtension(ctx.uuid);
         // eslint-disable-next-line no-await-in-loop
         await waitFor(() => ctx.dangle().state === 1, 3000);
@@ -131,6 +135,7 @@ async function cycle(ctx) {
     }
     ctx.check('20 enable/disable cycles leave no overlay behind while disabled', leftovers === 0, `${leftovers}`);
     ctx.check('no extension errors during cycling', errors === 0, ctx.dangle().error ?? '');
+    ctx.check('no timers survive disable()', orphanSources === 0, `${orphanSources}`);
     ctx.check('exactly one overlay after cycling', overlaysInUiGroup().length === 1);
     ctx.check('uiGroup child count unchanged', ui.get_n_children() === uiBefore, `${uiBefore} → ${ui.get_n_children()}`);
     ctx.check('Quick Settings grid unchanged after cycling', grid.get_n_children() === gridBefore, `${gridBefore} → ${grid.get_n_children()}`);
@@ -635,6 +640,148 @@ async function presets(ctx) {
     await waitFor(() => !overlay._timeline.is_playing(), 10000);
 }
 
+// ── phase 10: real windows, fullscreen, timers, idle CPU ───────────────────
+
+function spawnClient(ctx, mode) {
+    const launcher = new Gio.SubprocessLauncher({flags: Gio.SubprocessFlags.STDOUT_SILENCE | Gio.SubprocessFlags.STDERR_SILENCE});
+    return launcher.spawnv(['gjs', '-m', ctx.driverDir.get_child('client.js').get_path(), mode, ctx.out]);
+}
+
+function readClicks(ctx, mode) {
+    try {
+        const [, bytes] = GLib.file_get_contents(GLib.build_filenamev([ctx.out, `clicks-${mode}.txt`]));
+        return Number(new TextDecoder().decode(bytes));
+    } catch {
+        return -1;
+    }
+}
+
+const clientWindow = mode => global.display.list_all_windows().find(w => w.get_title() === `dangle-client-${mode}`);
+
+async function click(dev, x, y) {
+    await moveTo(dev, x, y);
+    await sleep(80);
+    dev.notify_button(now(), BTN_LEFT, Clutter.ButtonState.PRESSED);
+    await sleep(40);
+    dev.notify_button(now(), BTN_LEFT, Clutter.ButtonState.RELEASED);
+    await sleep(200);
+}
+
+async function windows(ctx) {
+    const overlay = ctx.overlay();
+    const {pointer: dev, keyboard} = devices();
+
+    // A maximized window right under the charms.
+    const client = spawnClient(ctx, 'maximize');
+    const shown = await waitFor(() => clientWindow('maximize')?.get_maximized?.() || clientWindow('maximize')?.is_maximized?.(), 8000);
+    ctx.check('a maximized client window appears under the charms', shown >= 0);
+    await sleep(500);
+    await waitFor(() => !overlay._timeline.is_playing(), 10000);
+    ctx.check('charms stay visible over a maximized window', overlay.actor.visible);
+    const children = Main.layoutManager.uiGroup.get_children();
+    ctx.check('charms are stacked above windows', children.indexOf(overlay.actor) > children.indexOf(global.window_group));
+
+    const charm = bottomCharm(overlay);
+    await click(dev, charm.x, charm.y);
+    ctx.check('a click on a charm (no Super) reaches the window underneath', readClicks(ctx, 'maximize') === 1, `${readClicks(ctx, 'maximize')} clicks`);
+    const rope = overlay._cords[0].rope;
+    await click(dev, rope.x[5], rope.y[5]);
+    ctx.check('a click on a rope reaches the window underneath', readClicks(ctx, 'maximize') === 2, `${readClicks(ctx, 'maximize')} clicks`);
+    await click(dev, 960, 700);
+    ctx.check('a click anywhere else reaches the window', readClicks(ctx, 'maximize') === 3);
+
+    await moveTo(dev, charm.x, charm.y);
+    await sleep(300);
+    await waitFor(() => !overlay._timeline.is_playing(), 10000);
+    const c2 = bottomCharm(overlay);
+    await moveTo(dev, c2.x, c2.y);
+    keyboard.notify_keyval(now(), Clutter.KEY_Super_L, Clutter.KeyState.PRESSED);
+    await waitFor(() => c2.actor.reactive, 1000);
+    dev.notify_button(now(), BTN_LEFT, Clutter.ButtonState.PRESSED);
+    await sleep(60);
+    const grabbed = overlay._input.dragging;
+    await moveTo(dev, c2.x + 60, c2.y + 10);
+    dev.notify_button(now(), BTN_LEFT, Clutter.ButtonState.RELEASED);
+    keyboard.notify_keyval(now(), Clutter.KEY_Super_L, Clutter.KeyState.RELEASED);
+    await sleep(300);
+    ctx.check('Super+click over a window grabs the charm, not the window', grabbed && readClicks(ctx, 'maximize') === 3,
+              `grabbed=${grabbed} clicks=${readClicks(ctx, 'maximize')}`);
+    ctx.check('Super+click over a window does not open the overview', !Main.overview.visible);
+    if (Main.overview.visible) {
+        Main.overview.hide();
+        await waitFor(() => !Main.overview.visible, 3000);
+    }
+    client.force_exit();
+    await waitFor(() => !clientWindow('maximize'), 5000);
+    await moveTo(dev, 300, 900);
+    await waitFor(() => !overlay._timeline.is_playing(), 10000);
+
+    // Fullscreen on the primary monitor hides and stops everything.
+    const full = spawnClient(ctx, 'fullscreen');
+    const hid = await waitFor(() => !overlay.actor.visible, 8000);
+    ctx.check('a fullscreen window hides the charms', hid >= 0);
+    ctx.check('…and stops all animation work', !overlay._timeline.is_playing() && overlay._pollId === 0 && overlay._gustId === 0);
+    full.force_exit();
+    const back = await waitFor(() => overlay.actor.visible, 8000);
+    ctx.check('charms return when fullscreen ends', back >= 0);
+    await waitFor(() => !overlay._timeline.is_playing(), 10000);
+}
+
+/** CPU time (utime + stime, in clock ticks) used by this gnome-shell process. */
+function shellTicks() {
+    const [, bytes] = GLib.file_get_contents('/proc/self/stat');
+    const fields = new TextDecoder().decode(bytes).split(') ')[1].split(' ');
+    return Number(fields[11]) + Number(fields[12]);
+}
+
+async function idleCpu(ctx) {
+    const {pointer: dev} = devices();
+    await moveTo(dev, 300, 900);
+    await waitFor(() => !ctx.overlay()._timeline.is_playing(), 10000);
+    await sleep(1000);
+    const pid = String(new Gio.Credentials().get_unix_pid());
+    const measure = async seconds => {
+        let paints = 0;
+        const id = global.stage.connect('after-paint', () => paints++);
+        const t0 = shellTicks();
+        await sleep(seconds * 1000);
+        global.stage.disconnect(id);
+        return {cpu: (shellTicks() - t0) / seconds, paints}; // 100 ticks/s = one core
+    };
+    const withCharms = await measure(20);
+    ctx.check('idle with charms settled: timeline stayed stopped', !ctx.overlay()._timeline.is_playing());
+    const top = await new Promise(resolve => {
+        const proc = Gio.Subprocess.new(['top', '-b', '-d', '5', '-n', '2', '-p', pid], Gio.SubprocessFlags.STDOUT_PIPE);
+        proc.communicate_utf8_async(null, null, (p, r) => resolve(p.communicate_utf8_finish(r)[1] ?? ''));
+    });
+    const topLine = top.trim().split('\n').filter(l => l.trim().startsWith(pid)).at(-1)?.trim().replace(/\s+/g, ' ') ?? 'n/a';
+    ctx.info('top -p gnome-shell (5 s sample, charms idle)', topLine);
+
+    Main.extensionManager.disableExtension(ctx.uuid);
+    await waitFor(() => ctx.dangle().state !== 1, 3000);
+    await sleep(1000);
+    const without = await measure(20);
+    Main.extensionManager.enableExtension(ctx.uuid);
+    await waitFor(() => ctx.dangle().state === 1, 3000);
+    ctx.info('gnome-shell idle over 20 s', `charms settled: ${withCharms.cpu.toFixed(2)}% CPU, ${withCharms.paints} repaints · ` +
+        `Dangle disabled: ${without.cpu.toFixed(2)}% CPU, ${without.paints} repaints`);
+    ctx.check('no repaints caused by idle charms', withCharms.paints <= without.paints + 1, `${withCharms.paints} vs ${without.paints}`);
+    ctx.check('no extra CPU at idle (within 0.5% of a core)', withCharms.cpu - without.cpu < 0.5,
+              `${(withCharms.cpu - without.cpu).toFixed(2)}%`);
+    await waitFor(() => !ctx.overlay()?._timeline.is_playing(), 10000);
+}
+
+function monitors(ctx) {
+    const overlay = ctx.overlay();
+    const layout = Main.layoutManager;
+    ctx.info('monitors', `${layout.monitors.map(m => `${m.width}x${m.height}+${m.x}+${m.y}`).join(', ')} primary=${layout.primaryIndex}`);
+    const primary = layout.primaryMonitor;
+    ctx.check('every cord hangs on the primary monitor', overlay._cords.every(c => c.rope.anchorX >= primary.x && c.rope.anchorX < primary.x + primary.width));
+    const before = overlay._cords[0];
+    layout.emit('monitors-changed');
+    ctx.check('monitors-changed rebuilds the cords', overlay._cords[0] !== before && overlay._cords.length === 2);
+}
+
 export const ALL_CHECKS = [
     ['structure', structure],
     ['sleep', sleeping],
@@ -648,6 +795,9 @@ export const ALL_CHECKS = [
     ['grab', grab],
     ['breeze', breeze],
     ['reduced-motion', reducedMotion],
+    ['windows', windows],
+    ['monitors', monitors],
     ['perf', perf],
+    ['idle-cpu', idleCpu],
     ['cycle', cycle],
 ];

@@ -10,7 +10,7 @@ import {MAX_CHARMS} from './charmLayout.js';
 export const MAX_CORDS = 5;
 export const MIN_LENGTH = 40;
 export const MAX_LENGTH = 320;
-export const DEFAULT_LENGTH = 220; // 20 segments of 11 points
+export const DEFAULT_LENGTH = 140;
 export const MIN_POSITION = 0.02;
 export const MAX_POSITION = 0.98;
 

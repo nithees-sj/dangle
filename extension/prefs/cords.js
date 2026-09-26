@@ -5,7 +5,7 @@ import Adw from 'gi://Adw';
 import Gtk from 'gi://Gtk';
 
 import {PRESET_IDS, presetName} from '../core/presets.js';
-import {STYLES, styleName, styleDescription} from '../core/ropeStyles.js';
+import {STYLES, styleName} from '../core/ropeStyles.js';
 import {MAX_CORDS, MIN_LENGTH, MAX_LENGTH, MIN_POSITION, MAX_POSITION, addCord, removeCord, setCharmCount} from '../core/cords.js';
 import {MAX_CHARMS} from '../core/charmLayout.js';
 import {applyPreset} from '../settingsModel.js';
@@ -128,15 +128,11 @@ export function cordsPage(model) {
 
             const style = new Adw.ComboRow({
                 title: 'Rope style',
-                subtitle: styleDescription(cord[2]),
-                subtitle_lines: 2,
                 model: Gtk.StringList.new(STYLES.map(s => s.name)),
                 selected: Math.max(0, STYLES.findIndex(s => s.id === cord[2])),
             });
             style.connect('notify::selected', () => {
-                const id = STYLES[style.selected].id;
-                edit(i, c => (c[2] = id));
-                style.subtitle = styleDescription(id);
+                edit(i, c => (c[2] = STYLES[style.selected].id));
                 row.subtitle = subtitleFor(model.cords[i]);
             });
 

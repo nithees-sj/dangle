@@ -23,13 +23,13 @@
     </key>
 
     <key name="cords" type="a(ddsas)">
-      <default>[(0.30, 120.0, 'spider-thread', ['builtin:star']), (0.37, 165.0, 'spider-thread', ['builtin:crescent'])]</default>
+      <default>[(0.30, 120.0, 'silver-cord', ['builtin:star']), (0.37, 165.0, 'spider-thread', ['builtin:crescent'])]</default>
       <summary>Cords currently hanging</summary>
       <description>Up to 5 cords: (position across the bar 0–1, rope length in pixels, rope style id, 1–3 charm ids from the top down).</description>
     </key>
 
     <key name="custom-cords" type="a(ddsas)">
-      <default>[(0.30, 120.0, 'spider-thread', ['builtin:star']), (0.37, 165.0, 'spider-thread', ['builtin:crescent'])]</default>
+      <default>[(0.30, 120.0, 'silver-cord', ['builtin:star']), (0.37, 165.0, 'spider-thread', ['builtin:crescent'])]</default>
       <summary>Remembered custom layout</summary>
       <description>Restored when the Custom preset is selected.</description>
     </key>

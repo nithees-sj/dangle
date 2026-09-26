@@ -23,7 +23,7 @@ export const PRESETS = Object.freeze({
     minimal: Object.freeze({
         name: 'Minimal',
         cords: [
-            [0.30, 120, 'spider-thread', ['builtin:star']],
+            [0.30, 120, 'silver-cord', ['builtin:star']],
             [0.37, 165, 'spider-thread', ['builtin:crescent']],
         ],
     }),

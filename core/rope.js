@@ -18,7 +18,7 @@
 // Units are pixels and seconds; y grows downward. All state lives in
 // Float64Arrays and the hot loop allocates nothing.
 
-import {DEFAULTS, DEFAULT_STYLE, resolvedPhysics, styleOf} from './ropeStyles.js';
+import {DEFAULTS, DEFAULT_STYLE, physicsOf, styleOf} from './ropeStyles.js';
 import {resolve, KNOT_INSET, GRAB_PADDING} from './charmLayout.js';
 
 /** Every rope must be asleep this many seconds after a push. */
@@ -55,9 +55,9 @@ const MIN_ELASTIC = 0.85;
 // Alternations of the guard between the anchor and a held node.
 const GUARD_SWEEPS = 4;
 
-// Sleep: DEFAULTS.framesBeforeSleep consecutive frames in which every node moved
-// slower than the rest speed, while the rope hangs within PLUMB_TOLERANCE px of
-// vertical (so a slow swing never freezes at a tilt).
+// Sleep: no node moved more than STILL_DRIFT px in DEFAULTS.sleepAfter seconds,
+// and every node hangs within PLUMB_TOLERANCE px of vertical.
+const STILL_DRIFT = 0.35;
 const PLUMB_TOLERANCE = 0.5;
 
 const EPSILON = 1e-9;
@@ -81,18 +81,16 @@ export class Rope {
      * @param {number} [options.charmSize] diameter of a lone charm, px
      * @param {number} [options.angle] release angle from vertical, radians
      * @param {boolean} [options.reducedMotion] hang still and settle fast
-     * @param {string} [options.timeProfile] 'morning' | 'afternoon' | 'night'
      */
     constructor({
         anchorX = 0,
         anchorY = 0,
-        length = DEFAULTS.segmentLength * DEFAULTS.segmentCount,
+        length = 140,
         style = DEFAULT_STYLE,
         charmCount = 1,
         charmSize = 44,
         angle,
         reducedMotion = false,
-        timeProfile = 'afternoon',
     } = {}) {
         const n = DEFAULTS.segmentCount + 1;
         this.pointCount = n;
@@ -101,9 +99,8 @@ export class Rope {
         this.px = new Float64Array(n);
         this.py = new Float64Array(n);
         this.invMass = new Float64Array(n);
-        this._weights = new Float64Array(n);
-        this._frameX = new Float64Array(n);
-        this._frameY = new Float64Array(n);
+        this._restX = new Float64Array(n);
+        this._restY = new Float64Array(n);
 
         this.anchorX = anchorX;
         this.anchorY = anchorY;
@@ -113,8 +110,7 @@ export class Rope {
         this.reducedMotion = reducedMotion;
         this.slots = [];
 
-        this.timeProfile = timeProfile;
-        this._physics = resolvedPhysics(this.style, timeProfile);
+        this._physics = physicsOf(this.style);
         this._settleDamping = 1;
         this._charmCount = charmCount;
         this._charmSize = charmSize;
@@ -134,7 +130,7 @@ export class Rope {
         this._elasticDemand = 1;
 
         this._layout();
-        this.reset(angle ?? (reducedMotion ? 0 : this._physics.initialAngle));
+        this.reset(angle ?? (reducedMotion ? 0 : DEFAULTS.initialAngle));
     }
 
     get isSleeping() {
@@ -190,10 +186,6 @@ export class Rope {
         dt = Math.min(dt, DEFAULTS.maxFrame);
         this._accumulator = Math.min(this._accumulator + dt, DEFAULTS.maxFrame);
 
-        // Where every node started this frame, to judge how fast it moved over it.
-        this._frameX.set(this.x);
-        this._frameY.set(this.y);
-
         let steps = 0;
         while (this._accumulator >= h) {
             this._advance(h);
@@ -210,8 +202,8 @@ export class Rope {
     push(direction = 1) {
         if (direction === 0)
             return;
-        const p = this._physics;
-        const speed = Math.sqrt(2 * p.gravity * this.length * (1 - Math.cos(p.initialAngle)));
+        const g = DEFAULTS.gravity * this._physics.gravityScale;
+        const speed = Math.sqrt(2 * g * this.length * (1 - Math.cos(DEFAULTS.initialAngle)));
         const end = this.pointCount - 1;
         this.px[end] = this.x[end] - Math.sign(direction) * speed * DEFAULTS.fixedStep;
         this.py[end] = this.y[end];
@@ -346,7 +338,7 @@ export class Rope {
         if (style === this.style)
             return;
         this.style = style;
-        this._physics = resolvedPhysics(style, this.timeProfile);
+        this._physics = physicsOf(style);
         this._layout();
         this.wake();
     }
@@ -373,16 +365,6 @@ export class Rope {
         this._charmSize = size;
         if (this._drag >= 0)
             this.endDrag();
-        this._layout();
-        this.wake();
-    }
-
-    /** Applies a time-of-day profile ('morning' | 'afternoon' | 'night') to the style. */
-    setTimeProfile(profile) {
-        if (profile === this.timeProfile)
-            return;
-        this.timeProfile = profile;
-        this._physics = resolvedPhysics(this.style, profile);
         this._layout();
         this.wake();
     }
@@ -466,7 +448,7 @@ export class Rope {
         });
 
         // Critical damping for a pendulum of this length: c = 2ζω, ω = √(g/L).
-        const omega = Math.sqrt(this._physics.gravity / this.length);
+        const omega = Math.sqrt(DEFAULTS.gravity * this._physics.gravityScale / this.length);
         this._settleDamping = Math.max(0.9, 1 - 2 * SETTLE_ZETA * omega * DEFAULTS.fixedStep);
 
         // The end node *is* its charm; an interior charm adds to the rope node.
@@ -541,7 +523,7 @@ export class Rope {
 
         // 2. Integrate.
         const gx = this._windX * h * h;
-        const gy = (p.gravity + this._windY) * h * h;
+        const gy = (DEFAULTS.gravity * p.gravityScale + this._windY) * h * h;
         const maxStep = DEFAULTS.maxSpeed * h;
         for (let i = 1; i < n; i++) {
             if (i === drag || inv[i] === 0)
@@ -574,8 +556,6 @@ export class Rope {
             py[drag] = y[drag] - this._dragVY * h;
         }
 
-        this._prepareWeights();
-
         // 4. Relax until converged or out of budget, in forward+backward pairs:
         //    stopping after a lone forward sweep on some substeps and a backward
         //    one on others leaves a sub-pixel flicker that never settles.
@@ -588,13 +568,9 @@ export class Rope {
         }
 
         // 5. Stretch ceiling, then the ceiling, then the exact guard.
-        // Like relaxation, capped with an early exit at the convergence tolerance:
-        // under gravity a tight cord (1.004) sits right at its ceiling, and "any
-        // link over by anything" would never exit and run every pass, every step.
-        // The guard below makes the ceiling exact regardless.
         const limit = rest * p.maxStretch;
         for (let pass = 0; pass < p.stretchPasses; pass++) {
-            if (this._clampStretch(limit, pass & 1) < DEFAULTS.tolerance)
+            if (!this._clampStretch(limit, pass & 1))
                 break;
         }
         this._applyCeiling();
@@ -603,54 +579,34 @@ export class Rope {
 
     /** One Gauss-Seidel sweep over every link. @returns largest correction */
     _relax(backward, rest) {
-        // The hottest loop in the extension: written out in full, over the
-        // effective inverse masses prepared once per substep (_prepareWeights).
-        const x = this.x, y = this.y, w = this._weights;
-        const last = this.pointCount - 2;
-        let worst = 0;
-        for (let s = 0; s <= last; s++) {
-            const a = backward ? last - s : s, b = a + 1;
-            const wa = w[a], wb = w[b], total = wa + wb;
-            if (total <= 0)
-                continue;
-            const dx = x[b] - x[a], dy = y[b] - y[a];
-            const d2 = dx * dx + dy * dy;
-            if (d2 <= EPSILON * EPSILON)
-                continue;
-            const d = Math.sqrt(d2);
-            const diff = d - rest;
-            const k = diff / (d * total);
-            x[a] += dx * k * wa;
-            y[a] += dy * k * wa;
-            x[b] -= dx * k * wb;
-            y[b] -= dy * k * wb;
-            const correction = (diff < 0 ? -diff : diff) * (wa > wb ? wa : wb) / total;
-            if (correction > worst)
-                worst = correction;
-        }
-        return worst;
-    }
-
-    /** Effective inverse masses for this substep: a held node is immovable. */
-    _prepareWeights() {
-        const w = this._weights;
-        w.set(this.invMass);
-        if (this._drag >= 0)
-            w[this._drag] = 0;
-    }
-
-    /** Clamp sweep: only links longer than `limit`. @returns the largest correction */
-    _clampStretch(limit, backward) {
         const n = this.pointCount;
         let worst = 0;
         if (backward) {
             for (let i = n - 2; i >= 0; i--)
-                worst = Math.max(worst, this._solveLink(i, limit, true));
+                worst = Math.max(worst, this._solveLink(i, rest, false));
         } else {
             for (let i = 0; i < n - 1; i++)
-                worst = Math.max(worst, this._solveLink(i, limit, true));
+                worst = Math.max(worst, this._solveLink(i, rest, false));
         }
         return worst;
+    }
+
+    /** Clamp sweep: only links longer than `limit`. @returns whether any moved */
+    _clampStretch(limit, backward) {
+        const n = this.pointCount;
+        let moved = false;
+        if (backward) {
+            for (let i = n - 2; i >= 0; i--) {
+                if (this._solveLink(i, limit, true) > 0)
+                    moved = true;
+            }
+        } else {
+            for (let i = 0; i < n - 1; i++) {
+                if (this._solveLink(i, limit, true) > 0)
+                    moved = true;
+            }
+        }
+        return moved;
     }
 
     /**
@@ -782,29 +738,32 @@ export class Rope {
     }
 
     /**
-     * Sleep follows the reference rule: the rope must stay still (every node
-     * slower than the rest speed over the frame) for framesBeforeSleep
-     * consecutive frames. Speed is measured across the whole frame rather than
-     * one substep, so the solver's sub-pixel corrections within a frame cancel
-     * out. A rope must also hang plumb, so a slow swing never freezes at a tilt.
+     * Still is judged by what the eye sees: how far each node has drifted since
+     * stillness began, not its per-substep speed, which sub-pixel solver jitter
+     * keeps above zero forever. A rope must also hang plumb, so a slow swing
+     * never freezes at a tilt.
      */
     _updateSleep(dt) {
         if (this._drag >= 0 || this._windX !== 0 || this._windY !== 0 || this._elastic !== 1) {
             this._still = 0;
             return;
         }
-        const x = this.x, y = this.y, fx = this._frameX, fy = this._frameY;
-        const limit = this._physics.restSpeed * dt;
-        const limit2 = limit * limit;
-        for (let i = 1; i < this.pointCount; i++) {
-            const dx = x[i] - fx[i], dy = y[i] - fy[i];
-            if (dx * dx + dy * dy > limit2 || Math.abs(x[i] - this.anchorX) > PLUMB_TOLERANCE) {
-                this._still = 0;
-                return;
-            }
+        const x = this.x, y = this.y, rx = this._restX, ry = this._restY;
+        const drift2 = STILL_DRIFT * STILL_DRIFT;
+        let still = this._still > 0;
+        for (let i = 1; i < this.pointCount && still; i++) {
+            const dx = x[i] - rx[i], dy = y[i] - ry[i];
+            still = dx * dx + dy * dy <= drift2 && Math.abs(x[i] - this.anchorX) <= PLUMB_TOLERANCE;
         }
-        this._still += 1;
-        if (this._still >= DEFAULTS.framesBeforeSleep) {
+        if (!still) {
+            // (Re)start the stillness window from here.
+            rx.set(x);
+            ry.set(y);
+            this._still = Number.MIN_VALUE;
+            return;
+        }
+        this._still += dt;
+        if (this._still >= DEFAULTS.sleepAfter) {
             // Freeze exactly: a sleeping rope carries no velocity into its wake.
             this.px.set(this.x);
             this.py.set(this.y);

@@ -15,7 +15,7 @@ import {BatteryMonitor} from './battery.js';
 import {CharmInput} from './input.js';
 import {Cord} from './cord.js';
 import {readCords} from '../settingsModel.js';
-import {DEFAULTS, resolvedPhysics, timeProfileAt} from '../core/ropeStyles.js';
+import {DEFAULTS} from '../core/ropeStyles.js';
 import {Breeze} from '../core/wind.js';
 
 const DEBUG = GLib.getenv('DANGLE_DEBUG') === '1';
@@ -45,7 +45,7 @@ export class Overlay {
         this._gustId = 0;
         this._windOn = false;
         this._box = {};
-        this._stats = DEBUG ? {frames: 0, physicsUs: 0, syncUs: 0, repaints: 0} : null;
+        this._stats = DEBUG ? {frames: 0, physicsUs: 0, syncUs: 0} : null;
 
         try {
             // Created hidden: _setVisible() is the only thing that shows it.
@@ -187,11 +187,9 @@ export class Overlay {
             look: this._look(),
             scale: geometry.scale,
             // A gentle hello: alternate cords swing in from alternate sides.
-            // (The release angle follows the time of day.)
-            angle: reduced ? 0 : resolvedPhysics(cord[2], this._timeProfile()).initialAngle * (index % 2 ? -0.8 : 1),
+            angle: reduced ? 0 : DEFAULTS.initialAngle * (index % 2 ? -0.8 : 1),
             reducedMotion: reduced,
             stats: this._stats,
-            timeProfile: this._timeProfile(),
         });
         this._input.attach(made);
         return made;
@@ -413,25 +411,9 @@ export class Overlay {
 
     // ── animation ──────────────────────────────────────────────────────────
 
-    /** Morning, afternoon or night, from the local clock. */
-    _timeProfile() {
-        return timeProfileAt(GLib.DateTime.new_now_local().get_hour());
-    }
-
-    /** Called on every wake: cheap, and keeps the ropes in step with the time of day. */
-    _syncTimeProfile() {
-        const profile = this._timeProfile();
-        if (profile === this._currentProfile)
-            return;
-        this._currentProfile = profile;
-        for (const cord of this._cords)
-            cord.setTimeProfile(profile);
-    }
-
     _wake() {
         if (!this._visible || !this._timeline || this._timeline.is_playing())
             return;
-        this._syncTimeProfile();
         if (DEBUG)
             this._logger.log('timeline start');
         this._timeline.start();
@@ -469,9 +451,8 @@ export class Overlay {
             const frames = Math.max(1, s.frames);
             this._logger.log(`timeline stop after ${s.frames} frames: ` +
                 `physics ${(s.physicsUs / frames / 1000).toFixed(3)} ms/frame, ` +
-                `actor updates ${(s.syncUs / frames / 1000).toFixed(3)} ms/frame, ` +
-                `${s.repaints} strip repaints`);
-            s.frames = s.physicsUs = s.syncUs = s.repaints = 0;
+                `actor updates ${(s.syncUs / frames / 1000).toFixed(3)} ms/frame (no CPU repaint)`);
+            s.frames = s.physicsUs = s.syncUs = 0;
         }
     }
 }

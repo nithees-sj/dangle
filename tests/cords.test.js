@@ -7,9 +7,10 @@ const two = () => [[0.3, 120, 'silver-cord', ['builtin:star']], [0.37, 165, 'spi
 
 test('normalizing repairs every field', () => {
     assert.deepEqual(C.normalizeCord([-1, 9999, 'rope?', ['nope', 'builtin:star', 'builtin:lotus', 'builtin:ghost', 'builtin:diya']]),
-                     [C.MIN_POSITION, C.MAX_LENGTH, 'thread', ['builtin:star', 'builtin:lotus', 'builtin:ghost']]);
+                     [C.MIN_POSITION, C.MAX_LENGTH, 'spider-thread', ['builtin:star', 'builtin:lotus', 'builtin:ghost']]);
     assert.deepEqual(C.normalizeCord([0.5, 10, 'neon', []]), [0.5, C.MIN_LENGTH, 'neon', ['builtin:star']]);
-    assert.deepEqual(C.normalizeCord(null), [0.5, C.DEFAULT_LENGTH, 'thread', ['builtin:star']]);
+    assert.deepEqual(C.normalizeCord(null), [0.5, C.DEFAULT_LENGTH, 'spider-thread', ['builtin:star']]);
+    assert.equal(C.DEFAULT_LENGTH, 220, '20 segments of 11 points');
 });
 
 test('at most five cords', () => {

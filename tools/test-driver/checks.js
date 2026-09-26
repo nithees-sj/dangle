@@ -112,6 +112,8 @@ async function visibility(ctx) {
 async function cycle(ctx) {
     const ui = Main.layoutManager.uiGroup;
     const before = countActors(global.stage);
+    ctx.info('uiGroup before cycling', Main.layoutManager.uiGroup.get_children()
+        .map(c => `${c.name || c.constructor.name}:${countActors(c)}`).join(' '));
     const uiBefore = ui.get_n_children();
     const grid = Main.panel.statusArea.quickSettings.menu._grid;
     const gridBefore = grid.get_n_children();
@@ -142,6 +144,10 @@ async function cycle(ctx) {
     ctx.check('top-bar indicators unchanged after cycling', indicators.get_n_children() === indicatorsBefore);
     await waitFor(() => !ctx.overlay()?._timeline.is_playing(), 10000);
     const after = countActors(global.stage);
+    if (after > before) {
+        const parts = root => root.get_children().map(c => `${c.name || c.constructor.name}:${countActors(c)}`).join(' ');
+        ctx.info('uiGroup after cycling', parts(Main.layoutManager.uiGroup));
+    }
     ctx.check('stage actor count does not grow after cycling', after <= before, `${before} → ${after}`);
 }
 
@@ -175,7 +181,8 @@ async function perf(ctx) {
     // Real overlay: shake the default cords and read the debug timers.
     const overlay = ctx.overlay();
     const s = overlay._stats;
-    s.frames = s.physicsUs = s.syncUs = 0;
+    await sleep(200); // let any restyle paint finish before counting
+    s.frames = s.physicsUs = s.syncUs = s.repaints = 0;
     overlay.shake();
     await sleep(1000);
     const frames = Math.max(1, s.frames);
@@ -183,8 +190,7 @@ async function perf(ctx) {
     ctx.info('overlay per frame (2 cords, shaking)',
              `physics ${phys.toFixed(3)} ms, actor updates ${sync.toFixed(3)} ms over ${s.frames} frames`);
     ctx.check('overlay physics + actor updates < 2 ms/frame', phys + sync < 2, `${(phys + sync).toFixed(3)} ms`);
-    const drawingAreas = overlay.actor.get_children().flatMap(c => c.get_children()).filter(a => a instanceof St.DrawingArea);
-    ctx.check('no CPU repaint: no St.DrawingArea in the overlay', drawingAreas.length === 0);
+    ctx.check('no CPU repaint while the ropes swing', s.repaints === 0, `${s.repaints} strip repaints`);
     await waitFor(() => !overlay._timeline.is_playing(), 10000);
 
     // Worst case: five cords with three charms each, all moving.
@@ -192,7 +198,7 @@ async function perf(ctx) {
     ctx.settings.set_value('cords', new GLib.Variant(CORDS, styles.map((style, i) =>
         [0.1 + i * 0.2, 150 + i * 20, style, ['builtin:star', 'builtin:crescent', 'builtin:star']])));
     await waitFor(() => !overlay._timeline.is_playing(), 10000);
-    s.frames = s.physicsUs = s.syncUs = 0;
+    s.frames = s.physicsUs = s.syncUs = s.repaints = 0;
     overlay.shake();
     await sleep(1500);
     const n = Math.max(1, s.frames);
@@ -454,6 +460,13 @@ async function styles(ctx) {
         ctx.check(`style batch ${batch} applied`, overlay._cords.every((c, i) => c.rope.style === list[i]));
         // eslint-disable-next-line no-await-in-loop
         await ctx.screenshot(`styles-${batch}`, 0, 0, 1920, 260);
+        // The same at the thickest setting, to inspect shading and textures.
+        ctx.settings.set_double('rope-thickness', 2.5);
+        // eslint-disable-next-line no-await-in-loop
+        await waitFor(() => !overlay._timeline.is_playing(), 10000);
+        // eslint-disable-next-line no-await-in-loop
+        await ctx.screenshot(`styles-${batch}-thick`, 0, 0, 1920, 260);
+        ctx.settings.reset('rope-thickness');
     }
     ctx.settings.reset('cords');
     await waitFor(() => !overlay._timeline.is_playing(), 10000);
@@ -608,7 +621,7 @@ async function prefs(ctx) {
     ctx.check('overlay: style from prefs', cords[0].rope.style === 'gold-chain');
     ctx.check('overlay: charm from the library', cords[1].charmIds[0] === 'builtin:lotus', cords[1].charmIds.join());
     ctx.check('overlay: charm size from prefs', cords[1].charmActors[0].icon_size === 50, `${cords[1].charmActors[0].icon_size}`);
-    ctx.check('overlay: shadow off from prefs', !cords[0]._shadow.visible);
+    ctx.check('overlay: shadow off from prefs', cords[0]._strips.shadow === false);
     for (const key of ['cords', 'custom-cords', 'preset', 'active-cord', 'charm-size', 'rope-thickness', 'shadow', 'grab-modifier'])
         ctx.settings.reset(key);
     await sleep(100);

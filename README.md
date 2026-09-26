@@ -24,7 +24,11 @@ crescent hanging at rest:
 ![Elastic pull](docs/screenshots/elastic-pull.png)
 
 The nine rope styles — Thread, Leather, Gold Chain, Silver Chain, Neon, Spider
-Thread, Midnight Cord, Temple Thread, Silver Cord:
+Thread (the default), Midnight Cord, Temple Thread, Silver Cord — each with its
+own weight, swing and stretch, a four-ink palette, a lit-from-the-left rod,
+a soft shadow and its own texture (twist, braid, chain links, silk, or Neon's
+glow). Shown here at 2.5× rope thickness; the ropes also swing a little longer
+in the morning and settle a little sooner at night:
 
 ![Rope styles](docs/screenshots/rope-styles.png)
 

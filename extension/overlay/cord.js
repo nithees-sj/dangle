@@ -1,10 +1,9 @@
 // One cord: a Rope, the actors that draw it, and its charm actors.
 //
-// Everything here is moved with translation and rotation only: the rope is a
-// chain of thin rounded St.Widgets (see segments.js) and the charms are
-// St.Icons. Their textures are rendered once, so while the rope moves the
-// only per-frame work is the physics and a few transform updates, and nothing
-// ever triggers a relayout or CPU drawing.
+// The rope is a chain of link strips (see ropeStrips.js) painted once with the
+// reference recipe; the charms are St.Icons. While the rope moves the only
+// per-frame work is the physics and a few transform updates: nothing is
+// repainted and nothing triggers a relayout.
 
 import Clutter from 'gi://Clutter';
 import Gio from 'gi://Gio';
@@ -14,38 +13,9 @@ import St from 'gi://St';
 import {Rope} from '../core/rope.js';
 import {DEFAULTS, appearanceOf, ropeWidth} from '../core/ropeStyles.js';
 import {charmFile} from '../charmRegistry.js';
-import {SegmentLayer, rgba} from './segments.js';
+import {RopeStrips} from './ropeStrips.js';
 
-const SHADOW_DX = 1;
-const SHADOW_DY = 2;
 const RAD_TO_DEG = 180 / Math.PI;
-
-/**
- * Ropes are drawn a little bolder than the style's nominal width, which is
- * measured against a charm the size of Hangly's; ours are smaller.
- */
-const WIDTH_BOOST = 1.4;
-
-/**
- * Link colours for each texture. Links are ~7 px long, so alternating colours
- * read as twist, braid or chain; no borders, which would swamp a 2–3 px rope
- * (the cloned shadow keeps it visible on light backgrounds).
- */
-function bodyCss({palette: p, texture}) {
-    const bg = (color, alpha = 1) => `background-color: ${rgba(color, alpha)};`;
-    switch (texture.kind) {
-    case 'twist':
-        return i => bg(i % 2 ? p.shade : p.base);
-    case 'braid':
-        return i => bg([p.base, p.shade, p.light][i % 3], i % 3 === 2 ? 0.85 : 1);
-    case 'links':
-        return i => bg(i % 2 ? p.shade : p.light);
-    case 'web':
-        return i => bg(i % 3 ? p.base : p.light);
-    default:
-        return () => bg(p.base);
-    }
-}
 
 export class Cord {
     /**
@@ -59,8 +29,9 @@ export class Cord {
      * @param {number} params.angle release angle
      * @param {boolean} params.reducedMotion
      * @param {object|null} params.stats debug timing accumulator
+     * @param {string} params.timeProfile 'morning' | 'afternoon' | 'night'
      */
-    constructor({parent, extensionDir, anchor, cord, look, scale, angle, reducedMotion, stats}) {
+    constructor({parent, extensionDir, anchor, cord, look, scale, angle, reducedMotion, stats, timeProfile}) {
         const [, length, style, charms] = cord;
         this._dir = extensionDir;
         this._scale = scale;
@@ -80,24 +51,13 @@ export class Cord {
             charmSize: look.charmSize * scale,
             angle,
             reducedMotion,
+            timeProfile,
         });
 
-        // One group per cord keeps its shadow, glow, rope and charms together.
+        // One group per cord keeps its rope and charms together.
         this.actor = new Clutter.Actor({reactive: false});
         parent.add_child(this.actor);
-        const links = DEFAULTS.segmentCount;
-        this._ropeGroup = new Clutter.Actor({reactive: false});
-        // The shadow is the rope itself, cloned, offset and darkened on the GPU,
-        // so it costs no per-frame work at all.
-        this._shadow = new Clutter.Clone({source: this._ropeGroup, reactive: false, opacity: 64});
-        this._shadow.set_translation(SHADOW_DX, SHADOW_DY, 0);
-        const darken = new Clutter.BrightnessContrastEffect();
-        darken.set_brightness(-1);
-        this._shadow.add_effect(darken);
-        this.actor.add_child(this._shadow);
-        this.actor.add_child(this._ropeGroup);
-        this._glow = new SegmentLayer(this._ropeGroup, links);
-        this._body = new SegmentLayer(this._ropeGroup, links);
+        this._strips = new RopeStrips(this.actor, DEFAULTS.segmentCount, stats);
         this._charmLayer = new Clutter.Actor({reactive: false});
         this.actor.add_child(this._charmLayer);
 
@@ -167,20 +127,10 @@ export class Cord {
     /** Moves every actor to where the rope is now. */
     sync() {
         const rope = this.rope;
-        // A stretched (or recoiling) rope has longer links: resize them when the
-        // change is visible, so a pulled rope never shows gaps.
-        const rest = rope.segmentLength * rope.elastic;
-        if (Math.abs(rest - this._drawnRest) >= 0.25) {
-            this._drawnRest = rest;
-            this._body.setRestLength(rest);
-            if (this._glowOn)
-                this._glow.setRestLength(rest);
-        }
         const end = rope.cordEnd(this._end);
-        const last = end.segment - 1;
-        this._body.update(rope.x, rope.y, last, end.x, end.y);
-        if (this._glowOn)
-            this._glow.update(rope.x, rope.y, last, end.x, end.y);
+        // A stretched (or recoiling) rope has longer links: the strips are scaled
+        // to match, never repainted.
+        this._strips.update(rope.x, rope.y, end.segment - 1, end.x, end.y, rope.segmentLength * rope.elastic);
 
         for (let i = 0; i < this.charmActors.length; i++) {
             const actor = this.charmActors[i];
@@ -191,10 +141,14 @@ export class Cord {
         }
     }
 
+    /** Follows the time of day ('morning' | 'afternoon' | 'night'). */
+    setTimeProfile(profile) {
+        this.rope.setTimeProfile(profile);
+    }
+
     destroy() {
-        this._glow?.destroy();
-        this._body?.destroy();
-        this._shadow = this._glow = this._body = this._ropeGroup = null;
+        this._strips?.destroy();
+        this._strips = null;
         this.charmActors = [];
         this.actor?.destroy();
         this.actor = null;
@@ -205,26 +159,23 @@ export class Cord {
 
     _restyle() {
         const style = this.rope.style;
-        const appearance = appearanceOf(style);
         const bottom = this.rope.slots.at(-1)?.radius ?? 20;
-        const width = Math.max(1, ropeWidth(style, bottom / this._scale, this._look.thickness) * WIDTH_BOOST * this._scale);
+        // Width in points from the style (widthScale × charm radius, never under
+        // minWidth), times the user's thickness; then into stage pixels.
+        const widthPoints = ropeWidth(style, bottom / this._scale, this._look.thickness);
         const rest = this.rope.segmentLength;
-        const key = `${style}|${width}|${rest}|${this._look.shadow}`;
+        const key = `${style}|${widthPoints}|${rest}|${bottom}|${this._look.shadow}`;
         if (key === this._styleKey)
             return;
         this._styleKey = key;
-
-        this._body.setStyle(bodyCss(appearance), width, rest, this._scale);
-        this._drawnRest = rest;
-
-        // Only a strong glow earns its own layer of moving links (Neon); a faint
-        // one (Spider Thread's 0.26) is invisible at this width anyway.
-        this._glowOn = appearance.glow >= 0.5;
-        this._glow.setStyle(() => `background-color: ${rgba(appearance.palette.base, 0.3 * appearance.glow)};`,
-                            width * 3, rest, this._scale);
-        this._glow.setVisible(this._glowOn);
-
-        this._shadow.visible = this._look.shadow;
+        this._strips.setLook({
+            appearance: appearanceOf(style),
+            width: widthPoints * this._scale,
+            widthPoints,
+            charmRadius: bottom,
+            rest,
+            shadow: this._look.shadow,
+        });
     }
 
     // ── charms ─────────────────────────────────────────────────────────────

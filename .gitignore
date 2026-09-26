@@ -1,5 +1,6 @@
-# Reference clone: studied, never shipped
+# Reference material: studied, never shipped
 reference-hangly/
+rope-designs/
 
 # Generated at install/pack time
 extension/core/

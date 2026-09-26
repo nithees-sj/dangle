@@ -18,6 +18,11 @@ Specifically:
   palette values (stretch ceilings and iteration budgets re-tuned for Dangle).
 - `core/charmLayout.js` — attachment nodes and size scales for 1–3 charms per
   cord, and the clearance rule that caps charm radii.
+- `core/ropeStyles.js` — also the base solver configuration, the time-of-day
+  profiles and the rope style descriptions.
+- `extension/overlay/ropeStrips.js` — the cord drawing recipe: glow halos,
+  the two-pass cord shadow, the 12-step cylinder shading and the twist, braid,
+  links and web texture passes (their widths, alphas and dash patterns).
 
 No code, image, icon or other asset was copied from that project, and its
 branding is not used. Its artwork is not licensed for reuse and none is included.

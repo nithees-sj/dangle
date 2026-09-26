@@ -19,10 +19,18 @@ User shell is **fish** — write any commands for fish.
 - `extension/` — the extension. `extension.js` is wiring only (enable/disable).
 
 ## Physics (core/rope.js)
-- Verlet, 20 segments, fixed 1/240 s substeps, dt capped at 50 ms.
-- Relaxation (12–20, in forward+backward pairs) and stretch passes (8–10) per
-  style, capped at 48, early exit at 0.1 px, plus an O(n) follow-the-leader
-  guard: at rest links never exceed 1.02× their length.
+- Rope styles use the EXACT reference values (user request, see
+  core/ropeStyles.js and tests/ropeStyles.test.js): base config (20 segments,
+  11 pt links, gravity 2000, damping 0.999, 1/240 s steps, max frame 0.1 s,
+  rest speed 4, 60 frames before sleep, release 0.38 rad, tolerance 0.05) and
+  per-style gravityScale/damping/maxStretch (1.004–1.030)/iterations and
+  stretchPasses (224–336)/charmMassScale, plus morning/afternoon/night profiles.
+  Default rope for new installs: Spider Thread.
+- Relaxation runs in forward+backward pairs; both it and the stretch clamp exit
+  early at the 0.05 px tolerance (without that the clamp ran all 320–336 passes
+  on tight cords); an O(n) follow-the-leader guard makes each style's ceiling
+  exact. Sleep = 60 consecutive frames with every node under the rest speed
+  (measured over the frame) while hanging plumb.
 - Elastic pull (user request): while a charm is held its rope may stretch up to
   `MAX_ELASTIC` (1.6×) toward the pointer, including straight down; on release
   a damped spring returns it to its own length (a small bounce). A rope cannot
@@ -40,10 +48,11 @@ User shell is **fish** — write any commands for fish.
   hover/grab, settings change, "Shake them".
 - Pointer poll `GLib.PRIORITY_LOW`: 250 ms, 50 ms only while the pointer is inside
   the cords' bounds + 40 px. Only while the overlay is visible.
-- Ropes are 20 thin rounded `St.Widget` links moved only with translation and
-  rotation (overlay/segments.js); the shadow is a darkened `Clutter.Clone`. No
-  CPU repaint, no relayout, no canvases. (A Cairo `St.DrawingArea` measured
-  ~1.8 ms/frame in the Shell and was replaced, per the repaint > 1 ms rule.)
+- Ropes are 20 link strips (overlay/ropeStrips.js): small `St.DrawingArea`s
+  painted ONCE per style/size with the exact reference recipe (glow, shadow,
+  12-step cylinder, texture; dash units = stroke widths as in Win2D), then only
+  translated/rotated/scaled. Zero repaints while swinging, no relayout. (A
+  per-frame Cairo canvas measured ~1.8 ms/frame and was rejected.)
 - Hide + stop on: toggle off, overview, fullscreen on primary, lock (disable()).
   Respect `St.Settings.get().enable_animations`.
 - Breeze interval 45–120 s; off on battery (UPower `OnBattery`) unless

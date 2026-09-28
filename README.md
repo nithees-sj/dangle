@@ -62,7 +62,8 @@ primary monitor, and on the lock screen.
 ## Install (fish)
 
 ```fish
-cd ~/Desktop/hangly-linux
+git clone https://github.com/nithees-sj/dangle.git
+cd dangle
 make install                                            # build and copy to ~/.local/share/gnome-shell/extensions/
 gsettings set org.gnome.shell disable-user-extensions false
 gnome-extensions enable dangle@nithees
